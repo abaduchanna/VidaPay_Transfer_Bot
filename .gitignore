@@ -66,3 +66,16 @@ Thumbs.db
 # Test outputs
 test_output/
 screenshots/
+
+# --- local runtime files (never commit) ---
+*.sqlite3
+*.sqlite3.bak
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*_Build_Info.txt
+whatsapp_images/
+exports/
+logs/
+ocr_debug/
+portal_downloads/
