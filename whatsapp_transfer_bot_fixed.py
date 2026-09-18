@@ -3,7 +3,7 @@
 WhatsApp → VidaPay CRM Transfer Bot v2.0
 Continuous monitoring with driver crash recovery, proper reply detection, and message extraction.
 
-Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.
+Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.
 """
 
 import tkinter as tk

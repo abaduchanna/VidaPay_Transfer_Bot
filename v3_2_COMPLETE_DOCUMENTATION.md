@@ -526,4 +526,4 @@ Just replace bot file and run!
 **Status**: ✅ PRODUCTION READY  
 **Key Achievement**: No crashes + No early replies
 
-**Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.**
+**Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.**

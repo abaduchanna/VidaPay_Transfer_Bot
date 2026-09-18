@@ -211,4 +211,4 @@ Just replace the bot file and run!
 **Status**: ✅ PRODUCTION READY  
 **Key Achievement**: NO WhatsApp replies sent until transfer is actually processed
 
-**Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.**
+**Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.**

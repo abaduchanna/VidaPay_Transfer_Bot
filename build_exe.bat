@@ -1,7 +1,7 @@
 @echo off
 REM ==========================================================================
 REM  GFH/VidaPay Bot — Pull + Clean + Build EXE
-REM  Developed by Abad Umair Channa
+REM  Developed by www.3SVerse.com
 REM
 REM  This script:
 REM    1. git pull — fetch latest code from GitHub

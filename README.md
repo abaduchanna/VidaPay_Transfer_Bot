@@ -89,3 +89,7 @@ originals used to build the embedded versions live in `assets/`:
 - `assets/gfh_telecom_llc_icon.ico` - window / taskbar icon
 - `assets/gfh_bot_icon.ico` - multi-size (16-256 px) app icon used by `build_exe.bat`
 - `assets/gfh_header_logo_preview.png` - downscaled navy-background logo that is embedded in the bot
+
+---
+
+Developed by **www.3SVerse.com** — software, systems & operations.

@@ -10,7 +10,7 @@ FIXES APPLIED:
 5. ✅ Exponential backoff retry logic
 6. ✅ Comprehensive error handling
 
-Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.
+Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.
 """
 
 import tkinter as tk

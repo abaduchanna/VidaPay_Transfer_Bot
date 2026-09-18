@@ -15,7 +15,7 @@ WORKFLOW (CORRECTED):
 
 CRITICAL: NO messages sent to WhatsApp until transfer is actually processed!
 
-Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.
+Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.
 """
 
 import tkinter as tk

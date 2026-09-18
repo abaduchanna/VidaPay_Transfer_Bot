@@ -357,4 +357,4 @@ Wait for login / Scan QR code
 
 ---
 
-**Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.**
+**Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.**

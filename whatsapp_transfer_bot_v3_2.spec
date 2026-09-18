@@ -3,7 +3,7 @@ import datetime as _dt
 _year = _dt.date.today().year
 
 SPEC_DOC = f"""PyInstaller spec for WhatsApp Transfer Bot v3.2
-Developed by Abad Umair Channa \u00a9 {_year}
+Developed by www.3SVerse.com \u00a9 {_year}
 Build command: pyinstaller whatsapp_transfer_bot_v3_2.spec
 """
 

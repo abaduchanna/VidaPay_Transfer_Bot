@@ -25,7 +25,6 @@ except ImportError:
     print("ERROR: tkinter not available. Install Python from python.org (not Microsoft Store).")
     sys.exit(1)
 from theme_manager import ThemeManager, apply_theme_to_window, get_copyright_year
-from header_manager import FixedHeaderManager
 from logo_handler import LogoHandler
 from tkinter import ttk, messagebox, scrolledtext, filedialog
 from datetime import datetime, date
@@ -4362,27 +4361,94 @@ class VidaPayTransferApp(tk.Tk):
         # Check-and-install OCR dependencies in the background
         threading.Thread(target=self._auto_setup_deps, daemon=True).start()
 
-    def _build_ui(self):
-        # ---- VidaPay header (FixedHeaderManager) ----
-        self.header_mgr = FixedHeaderManager(self, title="VidaPay Transfer Bot")
-        # header_manager already tags all header widgets at init — no override needed
-        # Load logo
+    def build_header(self):
+        """Header ported from VidaPay Incentive Extractor: logo on the left
+        (scaled to a fixed height, aspect-preserved), a thin RED divider
+        immediately after the logo, a centered title, and the sun/moon theme
+        toggle on the far right. The header stays navy across theme toggles
+        (every widget is tagged "header" / "header_label" for the theme
+        walker)."""
+        header = tk.Frame(self, bg=BRAND_NAVY, height=108)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        header._tag = "header"
+
+        # LEFT: logo
+        logo_frame = tk.Frame(header, bg=BRAND_NAVY)
+        logo_frame.pack(side=tk.LEFT, anchor="w", padx=(18, 16), pady=12)
+        logo_frame._tag = "header"
+
+        logo_path = None
         try:
             _lp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VidaPay_Logo.png")
-            if not os.path.exists(_lp) and hasattr(sys, '_MEIPASS'):
+            if not os.path.exists(_lp) and hasattr(sys, "_MEIPASS"):
                 _lp = os.path.join(sys._MEIPASS, "VidaPay_Logo.png")
             if os.path.exists(_lp):
-                self.header_mgr.set_logo(logo_path=_lp, text="VidaPay")
+                logo_path = _lp
         except Exception:
             pass
-        # Add theme toggle
-        self.header_mgr.add_theme_toggle(self.theme_manager, callback=self._on_header_theme_toggle)
 
-        # Theme toggle — attach to the header frame created by FixedHeaderManager
-        # Theme toggle is handled by header_mgr.add_theme_toggle() above.
-        # The old manual theme_box/theme_btn block has been removed to
-        # eliminate the duplicate "Theme / Switch to Dark" button that was
-        # appearing alongside the header's sun/moon toggle.
+        self.logo_handler = LogoHandler(logo_frame)
+        if logo_path and self.logo_handler.load_logo_from_file(logo_path, width=285, height=60, bg=BRAND_NAVY):
+            self.logo_handler.pack(anchor="w")
+        else:
+            self.logo_handler.create_text_placeholder("VIDAPAY", color=BRAND_RED, size=22, bg=BRAND_NAVY)
+            self.logo_handler.pack(anchor="w")
+        if getattr(self.logo_handler, "logo_widget", None) is not None:
+            self.logo_handler.logo_widget._tag = "header_label"
+
+        # RED divider immediately after the logo — this is the line that was
+        # missing with the old FixedHeaderManager header.
+        divider = tk.Frame(header, bg=BRAND_RED, width=3, height=58)
+        divider.pack(side=tk.LEFT, anchor="w", pady=14)
+        divider.pack_propagate(False)
+        divider._tag = "header"
+
+        # CENTER: title spans the whole header, lowered behind logo/divider
+        title_lbl = tk.Label(header, text="VidaPay Transfer Bot",
+                             font=("Segoe UI", 18, "bold"), fg="#ffffff",
+                             bg=BRAND_NAVY, anchor="center")
+        title_lbl.place(relx=0.5, rely=0.5, anchor="center",
+                        relwidth=1.0, relheight=1.0)
+        title_lbl.lower()
+        title_lbl._tag = "header_label"
+
+        # RIGHT: sun/moon theme toggle (extractor style)
+        right = tk.Frame(header, bg=BRAND_NAVY)
+        right.pack(side=tk.RIGHT, anchor="ne", padx=(16, 16), pady=12)
+        right._tag = "header"
+        self.theme_toggle_btn = tk.Button(
+            right,
+            text="\u2600\ufe0f" if getattr(self.theme_manager, "current_theme", "light") == "dark" else "\U0001F319",
+            command=self._header_theme_pressed,
+            bg=BRAND_RED, fg="#ffffff",
+            activebackground="#c8430f", activeforeground="#ffffff",
+            relief=tk.FLAT, padx=14, pady=8, font=("Segoe UI", 12, "bold"),
+            cursor="hand2", highlightthickness=0, borderwidth=0,
+        )
+        self.theme_toggle_btn.pack()
+        self.theme_toggle_btn._tag = "header_label"
+
+    def _header_theme_pressed(self):
+        """Flip ThemeManager state, then run the existing sync/apply path
+        (_on_header_theme_toggle reads self.theme_manager.current_theme)."""
+        try:
+            self.theme_manager.current_theme = (
+                "dark" if self.theme_manager.current_theme == "light" else "light"
+            )
+        except Exception:
+            pass
+        self._on_header_theme_toggle()
+        try:
+            self.theme_toggle_btn.configure(
+                text="\u2600\ufe0f" if self.theme_manager.current_theme == "dark" else "\U0001F319"
+            )
+        except Exception:
+            pass
+
+    def _build_ui(self):
+        # ---- VidaPay header (extractor-style, replaces FixedHeaderManager) ----
+        self.build_header()
 
         # ---- Body: LEFT (config + controls) | RIGHT (log panel) ----
         # Two-column layout so the log panel is always visible on the right
@@ -4536,7 +4602,7 @@ class VidaPayTransferApp(tk.Tk):
         _cbar = tk.Frame(self, bg="#090d26", height=24)
         _cbar.pack(fill=tk.X, side="bottom")
         _cbar.pack_propagate(False)
-        tk.Label(_cbar, text=f"Developed by Abad Umair Channa | Copyright © {date.today().year} | All rights reserved.",
+        tk.Label(_cbar, text=f"Developed by www.3SVerse.com | Copyright © {date.today().year} | All rights reserved.",
                  font=("Segoe UI", 8), fg="#9d9db8", bg="#090d26").pack(expand=True, fill="both")
 
     def _build_config_tab(self):
@@ -5194,10 +5260,11 @@ class VidaPayTransferApp(tk.Tk):
         try:
             if not isinstance(widget, ttk.Widget):
                 tag = getattr(widget, "_tag", None)
-                if tag == "header":
-                    widget.configure(bg=self.colors["navy"])
-                elif tag == "header_label":
-                    widget.configure(bg=self.colors["navy"])
+                if tag in ("header", "header_label"):
+                    # Extractor behavior: header widgets are PROTECTED — the
+                    # theme walker never restyles them (navy frames, RED
+                    # divider, red toggle button survive light/dark toggles).
+                    pass
                 elif tag == "run":
                     widget.configure(
                         bg=self.colors["red"],

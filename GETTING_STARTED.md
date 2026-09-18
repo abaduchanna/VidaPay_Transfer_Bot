@@ -1,6 +1,6 @@
 # WhatsApp Transfer Bot v2.0 - Getting Started Guide
 
-**Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.**
+**Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.**
 
 ---
 

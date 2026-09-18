@@ -1,6 +1,6 @@
 # WhatsApp Transfer Bot - Bug Fixes & Improvements v2.0
 
-**Developed by Abad Umair Channa | Copyright © 2026 | All rights reserved.**
+**Developed by www.3SVerse.com | Copyright © 2026 | All rights reserved.**
 
 ---
 
