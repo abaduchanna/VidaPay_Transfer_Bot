@@ -79,3 +79,6 @@ exports/
 logs/
 ocr_debug/
 portal_downloads/
+_protect_done.json
+vxrun*.py
+*.pyd
