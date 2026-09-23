@@ -161,6 +161,12 @@ pytesseract.pytesseract.tesseract_cmd = _locate_tesseract()
 AUTOMATION_PROFILE_DIR = r"C:\VidaPay_Edge_Automation_Profile_TransferBot"
 REMOTE_DEBUGGING_PORT = 9224
 ATTACH_TO_OPEN_EDGE = True
+
+# Active CDP port used when attaching. Fixed automation port by
+# default; auto-discovered from DevToolsActivePort files when that
+# port is closed (chrome://inspect remote debugging), see
+# _discover_devtools_port (idea: chrome-devtools-mcp issue #1826).
+_ACTIVE_CDP_PORT = REMOTE_DEBUGGING_PORT
 PAGE_LOAD_TIMEOUT = 90
 
 # "Wait for reply" feature: when a transfer request is detected, the bot
@@ -798,13 +804,20 @@ def create_edge_driver(log=print, attach=None):
     attach=False → launch the automation browser directly, standalone.
     attach=None  → use the ATTACH_TO_OPEN_EDGE build constant.
     """
+    global _ACTIVE_CDP_PORT
     if ATTACH_TO_OPEN_EDGE if attach is None else attach:
         if not is_port_open():
+            # fixed automation port closed - fall back to zero-config
+            # discovery (chrome://inspect remote debugging, DevTools-
+            # ActivePort; chrome-devtools-mcp#1826)
+            _ACTIVE_CDP_PORT = (_discover_devtools_port(log=log)
+                                or REMOTE_DEBUGGING_PORT)
+        if not is_port_open(port=_ACTIVE_CDP_PORT):
             log("Automation Edge is not open.")
             log("Opening VPN Browser Setup now.")
             open_vpn_setup_browser(log=log)
 
-        if not is_port_open():
+        if not is_port_open(port=_ACTIVE_CDP_PORT):
             raise WebDriverException(
                 "Automation Edge is not available on remote debugging port. "
                 "Open VPN Browser Setup first and keep that Edge window open."
@@ -813,7 +826,7 @@ def create_edge_driver(log=print, attach=None):
         options = Options()
         options.add_experimental_option(
             "debuggerAddress",
-            f"127.0.0.1:{REMOTE_DEBUGGING_PORT}"
+            f"127.0.0.1:{_ACTIVE_CDP_PORT}"
         )
         # Auto-dismiss any lingering JS confirm()/alert() dialogs (e.g. the
         # "Delete this SIM entry?" prompt that gets left behind after a
@@ -881,11 +894,109 @@ def create_logo_label(frame, width=100, height=50):
 # ------------------------------------------------------------------------
 # HUMAN-VERIFICATION AUTO-SOLVER (ported from VidaPay Device Ordering)
 #
-# Cloudflare Turnstile real-OS-mouse clicker (pyautogui) and Google
-# reCAPTCHA v2 audio-challenge solver.  All JavaScript-driven so they
-# are dual-monitor safe.  try_auto_click_human_verification is the
-# dispatcher used by _wait_for_human_verification_clear above.
+# SCREEN-FREE FIRST: _cdp_trusted_click dispatches CDP Input events
+# (isTrusted=true - identical to a physical mouse as far as the page
+# can detect). No OS mouse is moved and no window is focused, so the
+# bot keeps working while the seller uses another monitor; the Edge
+# window just must not be minimized. Cross-origin challenge iframes
+# (Turnstile / reCAPTCHA) are reached because the events go through
+# the browser-side hit-tester (same as puppeteer's page.mouse).
+# The legacy JS / pyautogui clickers stay as fallbacks only.
+# try_auto_click_human_verification is the dispatcher used by
+# _wait_for_human_verification_clear above.
 # ------------------------------------------------------------------------
+
+def _cdp_trusted_click(driver, vp_x, vp_y, log=print):
+    """One trusted left-click at VIEWPORT coords via CDP.
+    Screen-free: no real cursor movement, no foreground change."""
+    def _dispatch(etype, buttons, count):
+        driver.execute_cdp_cmd("Input.dispatchMouseEvent", {
+            "type": etype,
+            "x": float(vp_x),
+            "y": float(vp_y),
+            "button": "left",
+            "buttons": buttons,
+            "clickCount": count,
+        })
+
+    try:
+        _dispatch("mouseMoved", 0, 0)
+        time.sleep(0.06)
+        _dispatch("mousePressed", 1, 1)
+        time.sleep(0.09)
+        _dispatch("mouseReleased", 0, 1)
+        return True
+    except Exception as exc:
+        log(f"CDP trusted click failed: {exc}")
+        return False
+
+
+def _cdp_click_iframe_checkbox(driver, iframe_el, offset_x=24,
+                               log=print):
+    """Trusted click on a challenge checkbox inside a cross-origin
+    iframe (reCAPTCHA anchor / Turnstile widget), computed from the
+    iframe's viewport rect. Returns False when it could not fire so
+    the caller can fall back to the legacy clickers."""
+    try:
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block:'center'});",
+            iframe_el)
+        time.sleep(0.4)
+        rect = driver.execute_script(
+            "const r = arguments[0].getBoundingClientRect();"
+            "return {left: r.left, top: r.top, width: r.width,"
+            "        height: r.height};", iframe_el)
+        if not rect or not rect.get("width"):
+            log("Challenge iframe has zero size - not rendered yet.")
+            return False
+        x = rect["left"] + offset_x
+        y = rect["top"] + rect["height"] / 2.0
+        log(f"CDP trusted click at viewport ({x:.0f},{y:.0f}) "
+            f"(iframe {rect['width']:.0f}x{rect['height']:.0f}).")
+        return _cdp_trusted_click(driver, x, y, log=log)
+    except Exception as exc:
+        log(f"CDP iframe checkbox click error: {exc}")
+        return False
+
+
+def _discover_devtools_port(log=print):
+    """Zero-config CDP port discovery (chrome-devtools-mcp#1826).
+    Chrome/Edge write DevToolsActivePort (line 1 = port) whenever
+    remote debugging is on - including the chrome://inspect/#remote-
+    debugging toggle on the user's normal browser. Returns the first
+    port that answers, or None."""
+    candidates = []
+    la = os.environ.get("LOCALAPPDATA")
+    if la:
+        candidates += [
+            os.path.join(la, "Microsoft", "Edge", "User Data",
+                         "DevToolsActivePort"),
+            os.path.join(la, "Google", "Chrome", "User Data",
+                         "DevToolsActivePort"),
+        ]
+    try:
+        candidates.append(os.path.join(AUTOMATION_PROFILE_DIR,
+                                       "DevToolsActivePort"))
+    except Exception:
+        pass
+    for path in candidates:
+        try:
+            with open(path, "r", encoding="utf-8",
+                      errors="ignore") as fh:
+                port = int((fh.readline() or "").strip())
+        except Exception:
+            continue
+        if not 0 < port < 65536:
+            continue
+        try:
+            with socket.create_connection(("127.0.0.1", port),
+                                          timeout=1):
+                log(f"CDP port {port} discovered via {path}")
+                return port
+        except Exception:
+            continue
+    return None
+
 
 def _pyautogui_click_turnstile(driver, log=print):
     """
@@ -1078,8 +1189,15 @@ def try_auto_click_human_verification(driver, log=print):
     ]
     for sel in _TURNSTILE_PRESENT_SELECTORS:
         try:
-            if driver.find_element(By.CSS_SELECTOR, sel):
-                log(f"Cloudflare Turnstile detected ({sel}) — using real mouse click.")
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el:
+                log(f"Cloudflare Turnstile detected ({sel}) — "
+                    f"CDP trusted click (screen-free).")
+                if _cdp_click_iframe_checkbox(driver, el,
+                                              offset_x=24, log=log):
+                    return True
+                log("Falling back to the real-mouse clicker "
+                    "(needs the Edge window in front).")
                 return _pyautogui_click_turnstile(driver, log=log)
         except Exception:
             pass
@@ -1414,26 +1532,47 @@ def try_solve_recaptcha(driver, log=print):
     time.sleep(2)
 
     try:
-        # ---- Step 2: JS-click .recaptcha-checkbox-border inside anchor iframe ----
-        driver.switch_to.frame(anchor_iframe)
-        log("Switched into reCAPTCHA anchor iframe.")
+        # ---- Step 2: TRUSTED click on the checkbox (screen-free) ----
+        # A JS .click() is isTrusted=false - Google reCAPTCHA now
+        # ignores it (checkbox toggles but never verifies). CDP Input
+        # events are trusted and reach the cross-origin anchor iframe,
+        # so they are tried FIRST and need no screen at all. The old
+        # JS path stays as the fallback.
+        clicked_checkbox = False
+        try:
+            if _cdp_click_iframe_checkbox(driver, anchor_iframe,
+                                          offset_x=28, log=log):
+                clicked_checkbox = True
+                log("Clicked reCAPTCHA checkbox "
+                    "(CDP trusted - screen-free).")
+        except Exception as _cdp_exc:
+            log(f"CDP trusted click unavailable ({_cdp_exc}) "
+                f"- JS fallback.")
 
-        # Wait for checkbox to appear
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".recaptcha-checkbox-border"))
-        )
-
-        clicked_checkbox = _js_click(driver, ".recaptcha-checkbox-border", by_id=False, log=log)
         if not clicked_checkbox:
-            # fallback to the wrapper span
-            clicked_checkbox = _js_click(driver, "#recaptcha-anchor", by_id=True, log=log)
+            driver.switch_to.frame(anchor_iframe)
+            log("Switched into reCAPTCHA anchor iframe.")
 
-        if clicked_checkbox:
-            log("Clicked reCAPTCHA checkbox (JS — dual-monitor safe).")
-        else:
-            log("Could not click reCAPTCHA checkbox.")
-            driver.switch_to.default_content()
-            return False
+            # Wait for checkbox to appear
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, ".recaptcha-checkbox-border"))
+            )
+
+            clicked_checkbox = _js_click(
+                driver, ".recaptcha-checkbox-border", by_id=False,
+                log=log)
+            if not clicked_checkbox:
+                # fallback to the wrapper span
+                clicked_checkbox = _js_click(
+                    driver, "#recaptcha-anchor", by_id=True, log=log)
+
+            if clicked_checkbox:
+                log("Clicked reCAPTCHA checkbox (JS — dual-monitor safe).")
+            else:
+                log("Could not click reCAPTCHA checkbox.")
+                driver.switch_to.default_content()
+                return False
 
         driver.switch_to.default_content()
         log("Waiting 3 s for challenge popup to appear...")
