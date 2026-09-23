@@ -5348,7 +5348,7 @@ class VidaPayTransferApp(tk.Tk):
         import sys as _sys, os as _os
         _meipass = getattr(_sys, "_MEIPASS", None)
         if _meipass:
-            for _ico_name in ("vidapay_icon.ico", "vidapay_icon.ico", "vidapay_icon.ico"):
+            for _ico_name in ("VidaPay_icon.ico", "VidaPay_icon.ico", "VidaPay_icon.ico"):
                 _ico_path = _os.path.join(_meipass, _ico_name)
                 if _os.path.exists(_ico_path):
                     try:

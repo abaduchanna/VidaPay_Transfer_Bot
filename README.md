@@ -51,7 +51,7 @@ double-clickable app, build the EXE instead (see below).
 A single-file, console-free `VidaPayTransferBot.exe` with the GFH icon can be
 built with PyInstaller:
 
-    build_exe.bat
+    build_VidaPay_Transfer_Bot.bat
 
 ...or manually:
 
@@ -87,7 +87,7 @@ originals used to build the embedded versions live in `assets/`:
 
 - `assets/GFH_Telecom_Logo.png` - original logo (6512x2275, RGBA)
 - `assets/gfh_telecom_llc_icon.ico` - window / taskbar icon
-- `assets/gfh_bot_icon.ico` - multi-size (16-256 px) app icon used by `build_exe.bat`
+- `assets/gfh_bot_icon.ico` - multi-size (16-256 px) app icon used by `build_VidaPay_Transfer_Bot.bat`
 - `assets/gfh_header_logo_preview.png` - downscaled navy-background logo that is embedded in the bot
 
 ---

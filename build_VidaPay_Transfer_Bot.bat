@@ -12,7 +12,7 @@ REM    5. Lists the produced .exe files in dist\
 REM
 REM  USAGE:
 REM    1. Save this file in the repo root (next to the .spec files)
-REM    2. Double-click build_exe.bat, OR run from Command Prompt
+REM    2. Double-click build_VidaPay_Transfer_Bot.bat, OR run from Command Prompt
 REM    3. The .exe files will appear in the dist\ folder
 REM
 REM  PREREQUISITES:
@@ -128,7 +128,7 @@ for %%S in (*.spec) do (
 if !SPEC_COUNT! equ 0 (
     echo    ERROR: No .spec files found in the repo root.
     echo    Create a .spec file first, or run PyInstaller manually:
-    echo      pyinstaller --onefile --windowed --icon vidapay_icon.ico whatsapp_transfer_bot_v3_2_complete_fix.py
+    echo      pyinstaller --onefile --windowed --icon VidaPay_icon.ico whatsapp_transfer_bot_v3_2_complete_fix.py
     pause
     exit /b 1
 )

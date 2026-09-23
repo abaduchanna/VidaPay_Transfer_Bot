@@ -16,7 +16,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('assets', 'assets'),
-        ('vidapay_icon.ico', '.'),
+        ('VidaPay_icon.ico', '.'),
         ('VidaPay_Logo.png', '.'),
         ('theme_manager.py', '.'),
         ('logo_handler.py', '.'),
@@ -123,5 +123,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='vidapay_icon.ico',
+    icon='VidaPay_icon.ico',
 )
