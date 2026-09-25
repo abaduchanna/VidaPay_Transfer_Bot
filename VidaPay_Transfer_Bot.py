@@ -27,6 +27,225 @@ except ImportError:
 from theme_manager import ThemeManager, apply_theme_to_window, get_copyright_year
 from logo_handler import LogoHandler
 from tkinter import ttk, messagebox, scrolledtext, filedialog
+
+# ============================================================================
+# CRASH FORENSICS (t133) — every silent failure now leaves a full report.
+#
+# Windowed EXEs (console=False) send every traceback to nowhere: worker-thread
+# exceptions, Tk callback errors, native faults and deliberate os._exit calls
+# all vanish without a word. This harness is installed FIRST so that even the
+# earliest failure writes a full report to %LOCALAPPDATA%\VidaPay\logs\ and
+# shows a visible dialog for fatal errors.
+# ============================================================================
+import faulthandler as _faulthandler
+import traceback as _traceback
+import platform as _platform
+import collections as _collections
+
+_CRASH_DIR = None            # resolved once, reused
+_CRASH_APP_KEY = "Transfer_Bot"   # per-app logs subfolder - shows which app wrote the files
+_CRASH_GUI_HOOK = None       # set once the GUI exists (thread errors -> log box)
+_CRASH_FH_FILE = None        # keep the faulthandler stream alive
+_CRASH_RECENT = _collections.deque(maxlen=50)   # last GUI log lines
+
+
+def _crash_dir():
+    global _CRASH_DIR
+    if _CRASH_DIR:
+        return _CRASH_DIR
+    candidates = []
+    appdata = os.environ.get("LOCALAPPDATA")
+    if appdata:
+        candidates.append(Path(appdata) / "VidaPay" / "logs")
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).parent / "logs")
+    candidates.append(Path.home() / "VidaPay" / "logs")
+    candidates.append(Path(tempfile.gettempdir()) / "VidaPay" / "logs")
+    for c in candidates:
+        c = c / _CRASH_APP_KEY
+        try:
+            c.mkdir(parents=True, exist_ok=True)
+            _CRASH_DIR = c
+            return c
+        except Exception:
+            continue
+    _CRASH_DIR = Path(".")
+    return _CRASH_DIR
+
+
+def _crash_recent(line):
+    """Record the last GUI activity lines; dumped into every crash report."""
+    try:
+        _CRASH_RECENT.append(str(line))
+    except Exception:
+        pass
+
+
+def _crash_runlog(line):
+    """Append-only process diary: proves the EXE even started, records
+    graceful closes, and separates real crashes from deliberate exits."""
+    try:
+        p = _crash_dir() / "run.log"
+        if p.exists() and p.stat().st_size > 512 * 1024:
+            p.unlink()
+        with open(p, "a", encoding="utf-8", errors="replace") as f:
+            f.write("[%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), line))
+    except Exception:
+        pass
+
+
+def _crash_header():
+    frozen = bool(getattr(sys, "frozen", False))
+    return ("\n" + "=" * 72 +
+            "\n[%s] CRASH REPORT\n" % time.strftime("%Y-%m-%d %H:%M:%S") +
+            "  mode       : %s\n" % ("frozen EXE" if frozen else "python source") +
+            "  executable : %s\n" % sys.executable +
+            "  python     : %s (%s)\n" % (_platform.python_version(),
+                                           _platform.architecture()[0]) +
+            "  platform   : %s\n" % _platform.platform() +
+            "  cwd        : %s\n" % os.getcwd() +
+            "=" * 72 + "\n")
+
+
+def _crash_write(kind, text):
+    """Write/append an incident file crash-<stamp>-<kind>.txt; returns path."""
+    try:
+        d = _crash_dir()
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        path = d / ("crash-%s-%s.txt" % (stamp, kind))
+        mode = "a" if path.exists() else "w"
+        with open(path, mode, encoding="utf-8", errors="replace") as f:
+            if mode == "w":
+                f.write(_crash_header())
+                if _CRASH_RECENT:
+                    f.write("RECENT ACTIVITY (last %d log lines):\n"
+                            % len(_CRASH_RECENT))
+                    for ln in list(_CRASH_RECENT)[-30:]:
+                        f.write("  | %s\n" % ln)
+                    f.write("-" * 72 + "\n")
+            f.write(text + "\n")
+        # keep the folder small: newest 20 crash files survive
+        try:
+            files = sorted(d.glob("crash-*.txt"),
+                           key=lambda p: p.stat().st_mtime, reverse=True)
+            for old in files[20:]:
+                old.unlink()
+        except Exception:
+            pass
+        return path
+    except Exception:
+        return None
+
+
+def _crash_note(reason):
+    """Label a deliberate silent exit (anti-tamper, watchdog, force-kill)
+    so a vanished app can always be told apart from a real crash."""
+    p = _crash_write("exit", "DELIBERATE EXIT: %s" % reason)
+    _crash_runlog("DELIBERATE EXIT: %s (%s)" % (reason, p))
+    return p
+
+
+def _crash_show(title, text):
+    """Native MessageBox - works even when Tk is broken or absent."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, text, title, 0x10)
+    except Exception:
+        pass
+
+
+def _vp_set_gui_hook(fn):
+    """Called by the app once the GUI exists: background-thread crashes are
+    mirrored into the on-screen log box instead of vanishing."""
+    global _CRASH_GUI_HOOK
+    _CRASH_GUI_HOOK = fn
+
+
+def _crash_install():
+    global _CRASH_FH_FILE
+    # 1) Native faults (access violations, aborts) -> full dump of ALL threads
+    try:
+        fh_path = _crash_dir() / "faultwatch.txt"
+        _CRASH_FH_FILE = open(fh_path, "a", encoding="utf-8", errors="replace")
+        _faulthandler.enable(file=_CRASH_FH_FILE)
+    except Exception:
+        pass
+
+    # 2) Uncaught exception on the MAIN thread -> file + visible dialog
+    def _sys_hook(tp, val, tb):
+        try:
+            body = "".join(_traceback.format_exception(tp, val, tb))
+            _crash_write("main", "UNCAUGHT EXCEPTION (main thread)\n" + body)
+            _crash_runlog("CRASH main thread: %r" % (val,))
+        except Exception:
+            pass
+        _crash_show("VidaPay Extractor - Error",
+                    "The application hit a fatal error.\n\n"
+                    + "".join(_traceback.format_exception_only(tp, val))
+                    + "\nA full report was saved to:\n" + str(_crash_dir()))
+        try:
+            sys.__excepthook__(tp, val, tb)
+        except Exception:
+            pass
+
+    sys.excepthook = _sys_hook
+
+    # 3) Uncaught exception in ANY background thread -> file + GUI mirror.
+    #    THIS is the one that previously made runs die with no message at all.
+    def _thread_hook(args):
+        try:
+            body = "".join(_traceback.format_exception(
+                args.exc_type, args.exc_value, args.exc_traceback))
+            _crash_write("thread",
+                         "UNCAUGHT EXCEPTION (thread: %s)\n%s"
+                         % (getattr(args.thread, "name", "?"), body))
+            _crash_runlog("CRASH thread %s: %r"
+                          % (getattr(args.thread, "name", "?"),
+                             args.exc_value))
+        except Exception:
+            pass
+        _crash_gui_hook_safe(
+            "A background task crashed: %r\nReport saved to: %s"
+            % (args.exc_value, _crash_dir()))
+
+    threading.excepthook = _thread_hook
+
+    # 4) Tk callback exceptions -> file + dialog (previously invisible too)
+    def _tk_hook(self, tp, val, tb):
+        try:
+            _crash_write("tk", "TK CALLBACK EXCEPTION\n"
+                         + "".join(_traceback.format_exception(tp, val, tb)))
+            _crash_runlog("CRASH tk callback: %r" % (val,))
+        except Exception:
+            pass
+        msg = ("".join(_traceback.format_exception_only(tp, val))
+               + "\nA full report was saved to:\n" + str(_crash_dir()))
+        try:
+            messagebox.showerror("VidaPay Extractor - Error", msg)
+        except Exception:
+            _crash_show("VidaPay Extractor - Error", msg)
+
+    try:
+        tk.Tk.report_callback_exception = _tk_hook
+    except Exception:
+        pass
+
+    _crash_runlog("APP START (mode=%s, py=%s)"
+                  % ("exe" if getattr(sys, "frozen", False) else "source",
+                     _platform.python_version()))
+
+
+def _crash_gui_hook_safe(line):
+    _crash_recent(line)
+    try:
+        if _CRASH_GUI_HOOK:
+            _CRASH_GUI_HOOK(line)
+    except Exception:
+        pass
+
+
+_crash_install()
 from datetime import datetime, date
 
 # Additional requirements
@@ -4936,6 +5155,12 @@ class WhatsAppScraper:
 class VidaPayTransferApp(tk.Tk):
     def __init__(self):
         super().__init__()
+
+        # Route background-thread crash messages into the on-screen log box
+        try:
+            _vp_set_gui_hook(self.log_msg)
+        except Exception:
+            pass
         self.title("VidaPay Inventory Transfer Bot (Standalone)")
         self.geometry("1020x850")
         self.configure(bg=BRAND_SURFACE)
@@ -5654,6 +5879,7 @@ class VidaPayTransferApp(tk.Tk):
     )
 
     def log_msg(self, msg):
+        _crash_recent(msg)   # crash reports carry the last activity lines
         try:
             verbose = self.verbose_logging.get()
         except Exception:
@@ -6954,4 +7180,14 @@ if __name__ == "__main__":
     _enable_dpi_awareness()
     app = VidaPayTransferApp()
     app.after(10, lambda: app.state("zoomed"))
-    app.mainloop()
+    try:
+        app.mainloop()
+    except SystemExit:
+        raise
+    except BaseException:
+        # report_callback_exception normally covers callbacks; this catches
+        # anything that escapes mainloop itself
+        sys.excepthook(*sys.exc_info())
+        raise
+    finally:
+        _crash_runlog("APP CLOSE (mainloop ended)")
