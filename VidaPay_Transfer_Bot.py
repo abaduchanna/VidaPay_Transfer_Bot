@@ -1287,6 +1287,44 @@ def _human_cdp_click(driver, vp_x, vp_y, log=print, label="target"):
         return False
 
 
+# >>> HUMAN-ELEMENT-CLICK v2 PATCH START >>>
+def _human_click_element(driver, element, log=print, label="button"):
+    """Humanized trusted click on a Selenium element (MAIN document):
+    scroll into view, aim at the element centre, dispatch the humanized
+    CDP click (same engine as the challenge checkbox - curved approach,
+    hover, real press timing, isTrusted=true). Falls back to the
+    element's own .click() when the element lives inside a cross-origin
+    frame (Selenium routes those correctly) or the CDP path fails."""
+    try:
+        in_top = driver.execute_script("return window.top === window.self;")
+    except Exception:
+        in_top = True
+    if in_top:
+        try:
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});", element)
+            time.sleep(0.3)
+            r = driver.execute_script(
+                "const r = arguments[0].getBoundingClientRect();"
+                "return {x: r.x + r.width / 2, y: r.y + r.height / 2};",
+                element)
+            if r and r.get("x") is not None and _cdp_trusted_click(
+                    driver, r["x"], r["y"], log=log):
+                return True
+        except Exception as exc:
+            log(f"  humanized element click fallback ({label}): {exc}")
+    try:
+        element.click()
+        return True
+    except Exception:
+        try:
+            driver.execute_script("arguments[0].click();", element)
+            return True
+        except Exception:
+            return False
+# <<< HUMAN-ELEMENT-CLICK v2 PATCH END <<<
+
+
 def _cdp_trusted_click(driver, vp_x, vp_y, log=print):
     """One trusted left-click at VIEWPORT coords via CDP.
     Screen-free: no real cursor movement, no foreground change."""
@@ -2199,27 +2237,21 @@ def _click_login_verify_button(driver, log=print):
     while time.time() < end_time:
         for sel in _SELECTORS:
             try:
-                result = driver.execute_script(
+                el = driver.execute_script(
                     """
                     const el = document.querySelector(arguments[0]);
-                    if (!el) return 'NOT_FOUND';
+                    if (!el) return null;
                     el.removeAttribute('disabled');
                     el.classList.remove('disabled');
                     el.scrollIntoView({block: 'center', inline: 'center'});
-                    const rect = el.getBoundingClientRect();
-                    const cx = rect.left + rect.width  / 2;
-                    const cy = rect.top  + rect.height / 2;
-                    const opts = {bubbles:true, cancelable:true, view:window, clientX:cx, clientY:cy};
-                    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(
-                        t => el.dispatchEvent(new MouseEvent(t, opts))
-                    );
-                    return 'CLICKED';
+                    return el;
                     """,
                     sel,
                 )
-                if result == "CLICKED":
-                    log(f"Clicked login Verify button ({sel}) via JS.")
-                    return True
+                if el is not None:
+                    if _human_click_element(driver, el, log=log, label=sel):
+                        log(f"Clicked login Verify button ({sel}) (humanized trusted).")
+                        return True
             except Exception:
                 continue
         time.sleep(0.5)
@@ -2340,7 +2372,8 @@ class VidapayTransferSystem:
                     continue
 
             if login_btn:
-                login_btn.click()
+                _human_click_element(self.driver, login_btn, log=self.log,
+                                     label="login-btn")
                 self.log("Login button clicked.")
             else:
                 password_field.send_keys(Keys.RETURN)
