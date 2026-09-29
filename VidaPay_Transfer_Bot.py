@@ -5331,8 +5331,8 @@ class VidaPayTransferApp(tk.Tk):
             ctrl_frame,
             text="Run Now",
             icon_key="play",
-            bg=self.colors["red"],
-            fg="#ffffff",
+            bg=self.colors["panel_alt"],
+            fg=self.colors["text"],
             command=self.run_manual,
             tag="run",
         )
@@ -5342,8 +5342,8 @@ class VidaPayTransferApp(tk.Tk):
             ctrl_frame,
             text="Start Scheduler",
             icon_key="clock",
-            bg=self.colors["red"],
-            fg="#ffffff",
+            bg=self.colors["panel_alt"],
+            fg=self.colors["text"],
             command=self.toggle_scheduler,
             tag="sched",
         )
@@ -5353,8 +5353,8 @@ class VidaPayTransferApp(tk.Tk):
             ctrl_frame,
             text="Stop",
             icon_key="stop",
-            bg=self.colors["red"],
-            fg="#ffffff",
+            bg=self.colors["panel_alt"],
+            fg=self.colors["text"],
             command=self.stop_bot,
             tag="stop",
             state=tk.DISABLED,
@@ -5395,9 +5395,9 @@ class VidaPayTransferApp(tk.Tk):
             log_header,
             text="Clear",
             font=("Segoe UI", 9, "bold"),
-            bg=self.colors.get("red", "#f0541c"),
-            fg="#ffffff",
-            activebackground="#D8431A",
+            bg=self.colors.get("panel_alt", "#1c2447"),
+            fg=self.colors.get("text", "#ffffff"),
+            activebackground=self.colors.get("red", "#f0541c"),
             activeforeground="#ffffff",
             relief=tk.FLAT,
             padx=8,
@@ -5576,8 +5576,8 @@ class VidaPayTransferApp(tk.Tk):
             bot_frame,
             text="Save All Settings",
             icon_key="save",
-            bg=self.colors["red"],
-            fg="#ffffff",
+            bg=self.colors["panel_alt"],
+            fg=self.colors["text"],
             command=self.save_settings,
             width=None,
             tag="save",
@@ -6082,8 +6082,8 @@ class VidaPayTransferApp(tk.Tk):
         )
         style.configure(
             "TButton",
-            background=c["red"],
-            foreground="#ffffff",
+            background=c["panel_alt"],
+            foreground=c["text"],
             bordercolor=c["red"],
             padding=[10, 6],
             font=("Segoe UI", 9, "bold"),
@@ -6092,9 +6092,9 @@ class VidaPayTransferApp(tk.Tk):
         )
         style.map(
             "TButton",
-            background=[("active", "#D8431A"), ("pressed", "#B8330F"), ("disabled", c["red"])],
-            foreground=[("active", "#ffffff"), ("pressed", "#ffffff"), ("disabled", "#ffe3d7")],
-            bordercolor=[("active", c["red"]), ("pressed", c["red"])],
+            background=[("pressed", "#B8330F"), ("active", c["red"]), ("disabled", c["panel_alt"])],
+            foreground=[("pressed", "#ffffff"), ("active", "#ffffff"), ("disabled", c["text_dim"])],
+            bordercolor=[("active", c["red"]), ("pressed", c["red"]), ("disabled", c["border"])],
         )
         style.configure(
             "Horizontal.TProgressbar",
@@ -6115,53 +6115,35 @@ class VidaPayTransferApp(tk.Tk):
                     # theme walker never restyles them (navy frames, RED
                     # divider, red toggle button survive light/dark toggles).
                     pass
-                elif tag == "run":
+                elif tag in ("run", "sched", "save", "stop"):
                     widget.configure(
-                        bg=self.colors["red"],
-                        fg="#ffffff",
-                        activebackground="#d84410",
+                        bg=self.colors["panel_alt"],
+                        fg=self.colors["text"],
+                        activebackground=self.colors["red"],
                         activeforeground="#ffffff",
-                    )
-                elif tag == "sched":
-                    # Scheduler button: navy when idle, red when running (Stop Scheduler)
-                    try:
-                        txt = str(widget.cget("text")).lower()
-                    except Exception:
-                        txt = ""
-                    if "stop" in txt:
-                        widget.configure(
-                            bg=self.colors["red"],
-                            fg="#ffffff",
-                            activebackground="#d84410",
-                            activeforeground="#ffffff",
-                        )
-                    else:
-                        widget.configure(
-                            bg=self.colors["navy"],
-                            fg="#ffffff",
-                            activebackground="#1b2047",
-                            activeforeground="#ffffff",
-                        )
-                elif tag == "save":
-                    widget.configure(
-                        bg=self.colors["navy"],
-                        fg="#ffffff",
-                        activebackground="#1b2047",
-                        activeforeground="#ffffff",
-                    )
-                elif tag == "stop":
-                    widget.configure(
-                        bg="#6b7280",
-                        fg="#ffffff",
-                        activebackground="#565e6c",
-                        activeforeground="#ffffff",
+                        disabledbackground=self.colors["panel_alt"],
+                        disabledforeground=self.colors["text_dim"],
+                        highlightbackground=self.colors["red"],
+                        highlightcolor=self.colors["red"],
+                        highlightthickness=1,
                     )
                 elif isinstance(widget, tk.Button):
                     widget.configure(
                         bg=self.colors["panel_alt"],
                         fg=self.colors["text"],
-                        activebackground=self.colors["border"],
+                        activebackground=self.colors["red"],
+                        activeforeground="#ffffff",
+                        highlightbackground=self.colors["red"],
+                        highlightcolor=self.colors["red"],
+                        highlightthickness=1,
+                    )
+                elif isinstance(widget, (tk.Radiobutton, tk.Checkbutton)):
+                    widget.configure(
+                        bg=self.colors["bg"], fg=self.colors["text"],
+                        activebackground=self.colors["bg"],
                         activeforeground=self.colors["text"],
+                        selectcolor=self.colors["panel_alt"],
+                        highlightthickness=0,
                     )
                 elif isinstance(widget, tk.Label):
                     widget.configure(
@@ -6350,11 +6332,14 @@ class VidaPayTransferApp(tk.Tk):
             text=text,
             bg=bg,
             fg=fg,
-            activebackground=bg,
-            activeforeground=fg,
+            activebackground=self.colors["red"],
+            activeforeground="#ffffff",
             font=("Segoe UI", 10, "bold"),
             relief=tk.FLAT,
             bd=0,
+            highlightbackground=self.colors["red"],
+            highlightcolor=self.colors["red"],
+            highlightthickness=1,
             padx=14,
             pady=6,
             cursor="hand2",
@@ -6363,6 +6348,8 @@ class VidaPayTransferApp(tk.Tk):
         )
         if state is not None:
             kw["state"] = state
+            kw["disabledbackground"] = self.colors["panel_alt"]
+            kw["disabledforeground"] = self.colors["text_dim"]
         btn = tk.Button(parent, **kw)
         icon = self.images.get(icon_key)
         if icon is not None:
