@@ -5448,8 +5448,14 @@ class VidaPayTransferApp(tk.Tk):
         _cbar = tk.Frame(self, bg="#090d26", height=24)
         _cbar.pack(fill=tk.X, side="bottom")
         _cbar.pack_propagate(False)
-        tk.Label(_cbar, text=f"Developed by www.3SVerse.com | Copyright © {date.today().year} | All rights reserved.",
-                 font=("Segoe UI", 8), fg="#9d9db8", bg="#090d26").pack(expand=True, fill="both")
+        _cbar._tag = "footer"
+        _cbar_label = tk.Label(
+            _cbar,
+            text=f"Developed by www.3SVerse.com | Copyright © {date.today().year} | All rights reserved.",
+            font=("Segoe UI", 8), fg="#9d9db8", bg="#090d26",
+        )
+        _cbar_label.pack(expand=True, fill="both")
+        _cbar_label._tag = "footer_label"
 
     def _build_config_tab(self):
         config_container = tk.Frame(self.tab_config)
@@ -6092,9 +6098,9 @@ class VidaPayTransferApp(tk.Tk):
         )
         style.map(
             "TButton",
-            background=[("pressed", "#B8330F"), ("active", c["red"]), ("disabled", c["panel_alt"])],
-            foreground=[("pressed", "#ffffff"), ("active", "#ffffff"), ("disabled", c["text_dim"])],
-            bordercolor=[("active", c["red"]), ("pressed", c["red"]), ("disabled", c["border"])],
+            background=[("disabled", c["panel_alt"]), ("pressed", "#B8330F"), ("active", c["red"])],
+            foreground=[("disabled", c["text_dim"]), ("pressed", "#ffffff"), ("active", "#ffffff")],
+            bordercolor=[("disabled", c["border"]), ("pressed", c["red"]), ("active", c["red"])],
         )
         style.configure(
             "Horizontal.TProgressbar",
@@ -6110,7 +6116,7 @@ class VidaPayTransferApp(tk.Tk):
         try:
             if not isinstance(widget, ttk.Widget):
                 tag = getattr(widget, "_tag", None)
-                if tag in ("header", "header_label"):
+                if tag in ("header", "header_label", "footer", "footer_label"):
                     # Extractor behavior: header widgets are PROTECTED — the
                     # theme walker never restyles them (navy frames, RED
                     # divider, red toggle button survive light/dark toggles).

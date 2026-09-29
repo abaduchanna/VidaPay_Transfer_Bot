@@ -39,6 +39,17 @@ STDLIB = getattr(sys, "stdlib_module_names", frozenset())
 LAUNCHER_TMPL = '''\
 # 3SVerse protected build. All application logic ships as compiled native
 # extensions - this EXE contains no Python source and no Python bytecode.
+# PyInstaller cannot inspect imports inside native extensions. Pre-import
+# every verified module path so package submodules (notably tkinter.ttk)
+# are attached to their parent packages before the compiled core starts.
+import importlib as _il
+
+for _m in ({preimports}):
+    try:
+        _il.import_module(_m)
+    except Exception:
+        pass
+
 import {module}  # compiled application core (runs on import)
 '''
 
@@ -208,7 +219,7 @@ def spec_entry_scripts(spec_text):
 
 
 def parse_imports(py_path):
-    """Top-level import names + full dotted paths from one .py file."""
+    """Top-level names plus every referenced dotted module path."""
     tops, dotted = set(), set()
     try:
         tree = ast.parse(py_path.read_text(encoding="utf-8"))
@@ -225,7 +236,27 @@ def parse_imports(py_path):
             if node.module:
                 dotted.add(node.module)
                 tops.add(node.module.split(".")[0])
+                for alias in node.names:
+                    if alias.name and alias.name != "*":
+                        dotted.add(f"{node.module}.{alias.name}")
     return tops, dotted
+
+
+def spec_excluded(spec_text):
+    """Names listed in a spec's excludedimports block."""
+    m = re.search(r"excludedimports\s*=\s*\[(.*?)\]", spec_text, re.S)
+    if not m:
+        return set()
+    return set(re.findall(r"['\"]([^'\"]+)['\"]", m.group(1)))
+
+
+def importable(name):
+    """Return whether a dotted module path resolves in this build."""
+    try:
+        import importlib.util
+        return importlib.util.find_spec(name) is not None
+    except Exception:
+        return False
 
 
 def cython_compat_fix(path):
@@ -338,6 +369,7 @@ def main():
 
     queue = [ROOT / e for e in entries]
     seen = set()
+    dotted_all = set()
     while queue:
         py = queue.pop(0).resolve()
         if py in seen or not py.is_file():
@@ -346,7 +378,8 @@ def main():
             continue
         seen.add(py)
         rel = py.relative_to(ROOT)
-        tops, _dotted = parse_imports(py)
+        tops, dotted = parse_imports(py)
+        dotted_all |= dotted
         for t in tops:
             if t in STDLIB:
                 continue
@@ -366,11 +399,28 @@ def main():
         log(f"  {str(rel):60} -> {mod}")
     log(f"third-party hiddenimports to inject: {sorted(third_party)}")
 
+    excluded_all = set()
+    for spec in specs:
+        excluded_all |= spec_excluded(spec.read_text(encoding="utf-8"))
+    excluded_tops = {x.split(".")[0] for x in excluded_all}
+    local_tops = {m.split(".")[0] for m in compiled.values()}
+    verified = sorted(
+        d for d in dotted_all
+        if d
+        and d not in compiled.values()
+        and d.split(".")[0] not in local_tops
+        and d.split(".")[0] not in excluded_tops
+        and importable(d)
+    )
+    log(f"verified module paths to bundle + pre-import ({len(verified)}):")
+    for d in verified:
+        log(f"  + {d}")
+
     # ---- entry launcher mapping ----------------------------------------
     entry_plan = {e: f"vxrun{i}.py" for i, e in enumerate(entries, 1)}
 
     # ---- compute spec rewrites (validated in both modes) ---------------
-    add_hidden = sorted(third_party) + sorted(compiled.values())
+    add_hidden = sorted(set(third_party) | set(verified) | set(compiled.values()))
     spec_patches = {}
     # no Python source ships in any EXE: drop datas lines for every root .py
     names_to_unship = {p.with_suffix("").name for p in ROOT.glob("*.py")} \
@@ -414,10 +464,16 @@ def main():
         log(f"entry {e}: {n} __main__ guard(s) -> runs on import")
 
     # ---- write launcher stubs ------------------------------------------
+    if verified:
+        preimports = "\n" + "\n".join(f'    "{d}",' for d in verified) + "\n"
+    else:
+        preimports = ""
     for e, launcher in entry_plan.items():
         mod = Path(e).stem  # entries are discovered from the repo root
-        (ROOT / launcher).write_text(LAUNCHER_TMPL.format(module=mod), encoding="utf-8")
-        log(f"launcher {launcher} -> import {mod}")
+        (ROOT / launcher).write_text(
+            LAUNCHER_TMPL.format(module=mod, preimports=preimports),
+            encoding="utf-8")
+        log(f"launcher {launcher} -> import {mod} (+{len(verified)} guarded pre-imports)")
 
     # ---- neutralize setuptools config that breaks cythonize ------------
     # (pyproject.toml with tool.setuptools.packages that matches nothing

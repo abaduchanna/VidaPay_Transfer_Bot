@@ -152,7 +152,7 @@ class FixedHeaderManager:
             command=toggle_and_callback,
             bg=self.BRAND_NAVY,
             fg="white",
-            activebackground=self.BRAND_RED,
+            activebackground=self.BRAND_NAVY,
             activeforeground="white",
             relief=tk.FLAT,
             padx=12,
