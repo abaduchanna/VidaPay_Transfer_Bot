@@ -6127,7 +6127,6 @@ class VidaPayTransferApp(tk.Tk):
                         fg=self.colors["text"],
                         activebackground=self.colors["red"],
                         activeforeground="#ffffff",
-                        disabledbackground=self.colors["panel_alt"],
                         disabledforeground=self.colors["text_dim"],
                         highlightbackground=self.colors["red"],
                         highlightcolor=self.colors["red"],
@@ -6354,7 +6353,10 @@ class VidaPayTransferApp(tk.Tk):
         )
         if state is not None:
             kw["state"] = state
-            kw["disabledbackground"] = self.colors["panel_alt"]
+            # Classic tk.Button has disabledforeground but no
+            # disabledbackground option (that invalid option crashed the EXE).
+            # The normal background is already panel_alt, so it remains
+            # theme-correct while disabled.
             kw["disabledforeground"] = self.colors["text_dim"]
         btn = tk.Button(parent, **kw)
         icon = self.images.get(icon_key)

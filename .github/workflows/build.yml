@@ -48,6 +48,22 @@ jobs:
           fi
           ls -la dist/
 
+      - name: Smoke-test packaged EXE startup
+        shell: powershell
+        run: |
+          $started = Get-Date
+          $exe = Join-Path $PWD "dist/${{ matrix.app }}.exe"
+          $process = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+          Start-Sleep -Seconds 15
+          $crashes = @(Get-ChildItem "$env:LOCALAPPDATA\VidaPay\logs" -Recurse -Filter "crash-*.txt" -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $started })
+          if ($crashes.Count -gt 0) {
+            $crashes | ForEach-Object { Get-Content $_.FullName }
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            throw "Packaged EXE wrote a startup crash report."
+          }
+          if ($process.HasExited) { throw "Packaged EXE exited during startup with code $($process.ExitCode)" }
+          Stop-Process -Id $process.Id -Force
+
 
       # Code signing (sigstore)
       - name: Install sigstore
