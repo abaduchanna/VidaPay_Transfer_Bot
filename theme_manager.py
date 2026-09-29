@@ -200,23 +200,30 @@ class ThemeManager:
         """Create a theme toggle button."""
         import tkinter as tk
 
-        colors = self.get_colors()
-        btn = tk.Label(
+        try:
+            surface = parent.cget("background")
+        except Exception:
+            surface = self.BRAND_NAVY
+        btn = tk.Button(
             parent,
-            text="🌙" if self.current_theme == "dark" else "☀️",
-            bg=self.BRAND_RED,
+            text="☀️" if self.current_theme == "dark" else "🌙",
+            command=lambda: self._on_toggle(btn, callback),
+            bg=surface,
             fg=self.BRAND_WHITE,
-            font=("Segoe UI", 9, "bold"),
+            activebackground=surface,
+            activeforeground=self.BRAND_WHITE,
+            font=("Segoe UI Emoji", 13),
             cursor="hand2",
-            padx=8,
-            pady=2,
+            width=3,
+            relief=tk.FLAT,
+            highlightthickness=0,
+            borderwidth=0,
         )
-        btn.bind("<Button-1>", lambda e: self._on_toggle(btn, callback))
         return btn
 
     def _on_toggle(self, btn, callback):
         new_theme = self.toggle()
-        btn.configure(text="🌙" if new_theme == "dark" else "☀️")
+        btn.configure(text="☀️" if new_theme == "dark" else "🌙")
         if callback:
             callback(new_theme)
 

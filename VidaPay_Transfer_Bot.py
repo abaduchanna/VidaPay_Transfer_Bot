@@ -5259,7 +5259,7 @@ class VidaPayTransferApp(tk.Tk):
         title_lbl.lower()
         title_lbl._tag = "header_label"
 
-        # RIGHT: sun/moon theme toggle (extractor style)
+        # RIGHT: sun/moon theme toggle (visually transparent on the header)
         right = tk.Frame(header, bg=BRAND_NAVY)
         right.pack(side=tk.RIGHT, anchor="ne", padx=(16, 16), pady=12)
         right._tag = "header"
@@ -5267,9 +5267,9 @@ class VidaPayTransferApp(tk.Tk):
             right,
             text="\u2600\ufe0f" if getattr(self.theme_manager, "current_theme", "light") == "dark" else "\U0001F319",
             command=self._header_theme_pressed,
-            bg=BRAND_RED, fg="#ffffff",
-            activebackground="#c8430f", activeforeground="#ffffff",
-            relief=tk.FLAT, padx=14, pady=8, font=("Segoe UI", 12, "bold"),
+            bg=BRAND_NAVY, fg="#ffffff",
+            activebackground=BRAND_NAVY, activeforeground="#ffffff",
+            relief=tk.FLAT, width=3, font=("Segoe UI Emoji", 13),
             cursor="hand2", highlightthickness=0, borderwidth=0,
         )
         self.theme_toggle_btn.pack()
@@ -5342,7 +5342,7 @@ class VidaPayTransferApp(tk.Tk):
             ctrl_frame,
             text="Start Scheduler",
             icon_key="clock",
-            bg=self.colors["navy"],
+            bg=self.colors["red"],
             fg="#ffffff",
             command=self.toggle_scheduler,
             tag="sched",
@@ -5353,7 +5353,7 @@ class VidaPayTransferApp(tk.Tk):
             ctrl_frame,
             text="Stop",
             icon_key="stop",
-            bg="#6b7280",
+            bg=self.colors["red"],
             fg="#ffffff",
             command=self.stop_bot,
             tag="stop",
@@ -5394,10 +5394,10 @@ class VidaPayTransferApp(tk.Tk):
         clr_btn = tk.Button(
             log_header,
             text="Clear",
-            font=("Segoe UI", 8),
-            bg=self.colors.get("panel", "#2a2d3e"),
-            fg=self.colors.get("text", "#ffffff"),
-            activebackground=self.colors.get("red", "#cc3333"),
+            font=("Segoe UI", 9, "bold"),
+            bg=self.colors.get("red", "#f0541c"),
+            fg="#ffffff",
+            activebackground="#D8431A",
             activeforeground="#ffffff",
             relief=tk.FLAT,
             padx=8,
@@ -5576,7 +5576,7 @@ class VidaPayTransferApp(tk.Tk):
             bot_frame,
             text="Save All Settings",
             icon_key="save",
-            bg=self.colors["navy"],
+            bg=self.colors["red"],
             fg="#ffffff",
             command=self.save_settings,
             width=None,
@@ -6082,16 +6082,19 @@ class VidaPayTransferApp(tk.Tk):
         )
         style.configure(
             "TButton",
-            background=c["panel_alt"],
-            foreground=c["text"],
-            bordercolor=c["border"],
-            padding=[10, 5],
-            font=("Segoe UI", 9),
+            background=c["red"],
+            foreground="#ffffff",
+            bordercolor=c["red"],
+            padding=[10, 6],
+            font=("Segoe UI", 9, "bold"),
+            focusthickness=1,
+            focuscolor=c["red"],
         )
         style.map(
             "TButton",
-            background=[("active", c["border"])],
-            foreground=[("active", c["text"])],
+            background=[("active", "#D8431A"), ("pressed", "#B8330F"), ("disabled", c["red"])],
+            foreground=[("active", "#ffffff"), ("pressed", "#ffffff"), ("disabled", "#ffe3d7")],
+            bordercolor=[("active", c["red"]), ("pressed", c["red"])],
         )
         style.configure(
             "Horizontal.TProgressbar",
