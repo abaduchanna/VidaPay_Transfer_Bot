@@ -5454,6 +5454,7 @@ class VidaPayTransferApp(tk.Tk):
             text=f"Developed by www.3SVerse.com | Copyright © {date.today().year} | All rights reserved.",
             font=("Segoe UI", 8), fg="#9d9db8", bg="#090d26",
         )
+        self.log_area._tag = "log"
         _cbar_label.pack(expand=True, fill="both")
         _cbar_label._tag = "footer_label"
 
@@ -5506,6 +5507,7 @@ class VidaPayTransferApp(tk.Tk):
         self.txt_wa_groups = scrolledtext.ScrolledText(
             bot_frame, width=35, height=4, font=("Segoe UI", 9)
         )
+        self.txt_wa_groups._tag = "input_text"
         self.txt_wa_groups.insert(tk.END, self.wa_group)
         self.txt_wa_groups.grid(
             row=1, column=0, columnspan=2, padx=10, pady=2, sticky=tk.W
@@ -5533,6 +5535,7 @@ class VidaPayTransferApp(tk.Tk):
         self.txt_trigger_words = scrolledtext.ScrolledText(
             bot_frame, width=35, height=3, font=("Segoe UI", 9)
         )
+        self.txt_trigger_words._tag = "input_text"
         saved_triggers = self.config_data.get("trigger_words", "transfer")
         self.txt_trigger_words.insert(tk.END, saved_triggers)
         self.txt_trigger_words.grid(
@@ -5552,6 +5555,7 @@ class VidaPayTransferApp(tk.Tk):
         self.txt_reply_phrases = scrolledtext.ScrolledText(
             bot_frame, width=35, height=3, font=("Segoe UI", 9)
         )
+        self.txt_reply_phrases._tag = "input_text"
         # Default phrases cover common ways team members acknowledge
         # a transfer request.
         _default_reply_phrases = (
@@ -6005,6 +6009,8 @@ class VidaPayTransferApp(tk.Tk):
         self.configure(bg=self.colors["bg"])
         self._style_ttk()
         self._theme_walk(self)
+        self._refresh_action_icons()
+        self._sync_control_buttons()
         self._update_theme_btn()
 
     def _style_ttk(self):
@@ -6022,18 +6028,19 @@ class VidaPayTransferApp(tk.Tk):
         )
         style.map(
             "TNotebook.Tab",
-            background=[("selected", c["red"])],
-            foreground=[("selected", "#ffffff")],
+            background=[("selected", c["panel_alt"]), ("active", c["red"])],
+            foreground=[("selected", c["text"]), ("active", "#ffffff")],
+            bordercolor=[("selected", c["red"]), ("active", c["red"])],
         )
         style.configure(
             "TLabelframe",
-            background=c["bg"],
+            background=c["panel"],
             bordercolor=c["border"],
             relief="solid",
         )
         style.configure(
             "TLabelframe.Label",
-            background=c["bg"],
+            background=c["panel"],
             foreground=c["text"],
             font=("Segoe UI", 10, "bold"),
         )
@@ -6111,11 +6118,13 @@ class VidaPayTransferApp(tk.Tk):
             darkcolor=c["red"],
         )
 
-    def _theme_walk(self, widget):
+    def _theme_walk(self, widget, inside_panel=False):
         """Recursively re-color every non-ttk widget from the active theme."""
+        tag = getattr(widget, "_tag", None)
+        panel_here = inside_panel or isinstance(widget, ttk.LabelFrame) or tag == "panel"
+        surface = self.colors["panel"] if panel_here else self.colors["bg"]
         try:
             if not isinstance(widget, ttk.Widget):
-                tag = getattr(widget, "_tag", None)
                 if tag in ("header", "header_label", "footer", "footer_label"):
                     # Extractor behavior: header widgets are PROTECTED — the
                     # theme walker never restyles them (navy frames, RED
@@ -6144,24 +6153,31 @@ class VidaPayTransferApp(tk.Tk):
                     )
                 elif isinstance(widget, (tk.Radiobutton, tk.Checkbutton)):
                     widget.configure(
-                        bg=self.colors["bg"], fg=self.colors["text"],
-                        activebackground=self.colors["bg"],
+                        bg=surface, fg=self.colors["text"],
+                        activebackground=surface,
                         activeforeground=self.colors["text"],
                         selectcolor=self.colors["panel_alt"],
                         highlightthickness=0,
                     )
                 elif isinstance(widget, tk.Label):
                     widget.configure(
-                        bg=self.colors["bg"], fg=self.colors["text"]
+                        bg=surface, fg=self.colors["text"]
                     )
                 elif isinstance(widget, tk.Frame):
-                    widget.configure(bg=self.colors["bg"])
+                    widget.configure(bg=surface)
                 elif isinstance(widget, scrolledtext.ScrolledText):
-                    widget.configure(
-                        bg=self.colors["log_bg"],
-                        fg=self.colors["log_fg"],
-                        insertbackground=self.colors["log_fg"],
-                    )
+                    if tag == "log":
+                        widget.configure(
+                            bg=self.colors["log_bg"],
+                            fg=self.colors["log_fg"],
+                            insertbackground=self.colors["log_fg"],
+                        )
+                    else:
+                        widget.configure(
+                            bg=self.colors["input"],
+                            fg=self.colors["text"],
+                            insertbackground=self.colors["text"],
+                        )
                 elif isinstance(widget, tk.Text):
                     widget.configure(
                         bg=self.colors["log_bg"],
@@ -6177,7 +6193,43 @@ class VidaPayTransferApp(tk.Tk):
         except Exception:
             pass
         for child in widget.winfo_children():
-            self._theme_walk(child)
+            self._theme_walk(child, panel_here)
+
+    def _refresh_action_icons(self):
+        """Repaint button glyphs for the active palette (white icons vanished
+        on light neutral buttons and looked stale after a theme toggle)."""
+        for key in ("play", "clock", "stop", "save"):
+            self.images[key] = self._build_icon(key, self.colors["text"])
+        for button, key in (
+            (getattr(self, "btn_run", None), "play"),
+            (getattr(self, "btn_sched", None), "clock"),
+            (getattr(self, "btn_stop", None), "stop"),
+            (getattr(self, "btn_save", None), "save"),
+        ):
+            if button is not None and self.images.get(key) is not None:
+                button.configure(image=self.images[key], compound=tk.LEFT)
+                button._imgref = self.images[key]
+
+    def _sync_control_buttons(self):
+        """Keep Run/Scheduler/Stop state colors correct after every toggle."""
+        common = dict(
+            bg=self.colors["panel_alt"], fg=self.colors["text"],
+            activebackground=self.colors["red"], activeforeground="#ffffff",
+            disabledforeground=self.colors["text_dim"],
+            highlightbackground=self.colors["red"], highlightcolor=self.colors["red"],
+        )
+        for button in (getattr(self, "btn_run", None),
+                       getattr(self, "btn_stop", None)):
+            if button is not None:
+                button.configure(**common)
+        sched = getattr(self, "btn_sched", None)
+        if sched is not None:
+            if getattr(self, "scheduler_running", False):
+                sched.configure(text="Stop Scheduler", bg=self.colors["red"],
+                                fg="#ffffff", activebackground="#B8330F",
+                                activeforeground="#ffffff")
+            else:
+                sched.configure(text="Start Scheduler", **common)
 
     def _load_brand_assets(self):
         """Load the real VidaPay logo + window icon (embedded), else render fallbacks."""
@@ -6536,11 +6588,13 @@ class VidaPayTransferApp(tk.Tk):
     def ui_state_running(self):
         self.btn_run.config(state=tk.DISABLED)
         self.btn_stop.config(state=tk.NORMAL)
+        self._sync_control_buttons()
         self.progress.start(10)
 
     def ui_state_stopped(self):
         self.btn_run.config(state=tk.NORMAL)
         self.btn_stop.config(state=tk.DISABLED)
+        self._sync_control_buttons()
         self.progress.stop()
 
     # --- Scheduler ---
@@ -6550,10 +6604,7 @@ class VidaPayTransferApp(tk.Tk):
             self.scheduler_running = False
             # FIX #4: Clear stale jobs when stopping
             schedule.clear()
-            self.btn_sched.config(
-                text="\u23f0 Start Scheduler", bg=self.colors["navy"],
-                activebackground="#1b2047"
-            )
+            self._sync_control_buttons()
             self.log_msg("Scheduler stopped and jobs cleared.")
         else:
             schedule.clear()
@@ -6571,10 +6622,7 @@ class VidaPayTransferApp(tk.Tk):
 
             if schedule.get_jobs():
                 self.scheduler_running = True
-                self.btn_sched.config(
-                    text="\u23f0 Stop Scheduler", bg=self.colors["red"],
-                    activebackground="#d84410"
-                )
+                self._sync_control_buttons()
                 self.scheduler_thread = threading.Thread(
                     target=self._scheduler_loop, daemon=True
                 )
