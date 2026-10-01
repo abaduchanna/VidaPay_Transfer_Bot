@@ -5261,18 +5261,16 @@ class VidaPayTransferApp(tk.Tk):
 
         # RIGHT: sun/moon theme toggle (visually transparent on the header)
         right = tk.Frame(header, bg=BRAND_NAVY)
-        right.pack(side=tk.RIGHT, anchor="ne", padx=(16, 16), pady=12)
+        right.pack(side=tk.RIGHT, fill=tk.Y, padx=(16, 16), pady=12)
         right._tag = "header"
-        self.theme_toggle_btn = tk.Button(
-            right,
-            text="\u2600\ufe0f" if getattr(self.theme_manager, "current_theme", "light") == "dark" else "\U0001F319",
-            command=self._header_theme_pressed,
-            bg=BRAND_NAVY, fg="#ffffff",
-            activebackground=BRAND_NAVY, activeforeground="#ffffff",
-            relief=tk.FLAT, width=3, font=("Segoe UI Emoji", 13),
-            cursor="hand2", highlightthickness=0, borderwidth=0,
+        # STANDARD theme toggle (Transfer Bot style): vector sun/crescent
+        # glyph - right-center aligned, transparent on the navy header.
+        from theme_manager import create_toggle_canvas
+        self.theme_toggle_btn = create_toggle_canvas(
+            right, self.theme_manager, self._header_theme_pressed,
+            bg=BRAND_NAVY,
         )
-        self.theme_toggle_btn.pack()
+        self.theme_toggle_btn.pack(expand=True)
         self.theme_toggle_btn._tag = "header_label"
 
     def _header_theme_pressed(self):
@@ -5286,9 +5284,7 @@ class VidaPayTransferApp(tk.Tk):
             pass
         self._on_header_theme_toggle()
         try:
-            self.theme_toggle_btn.configure(
-                text="\u2600\ufe0f" if self.theme_manager.current_theme == "dark" else "\U0001F319"
-            )
+            self.theme_toggle_btn._render_theme_glyph()
         except Exception:
             pass
 
