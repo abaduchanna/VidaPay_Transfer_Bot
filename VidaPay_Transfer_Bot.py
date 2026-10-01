@@ -419,8 +419,11 @@ THEMES = {
         "border": "#d5d9e5",
         "navy": "#090d26",
         "red": "#f0541c",
-        "log_bg": "#0f1830",
-        "log_fg": "#e2e8f0",
+        "log_bg": "#ffffff",
+        "log_fg": "#16213a",
+        "log_error": "#d63031",
+        "log_success": "#1e8e3e",
+        "log_warning": "#b45309",
     },
     "dark": {
         "bg": "#0b1020",
@@ -434,6 +437,9 @@ THEMES = {
         "red": "#f0541c",
         "log_bg": "#05070f",
         "log_fg": "#cbd5e1",
+        "log_error": "#ff6b6b",
+        "log_success": "#51cf66",
+        "log_warning": "#ffd43b",
     },
 }
 
@@ -5433,9 +5439,9 @@ class VidaPayTransferApp(tk.Tk):
         # Tag for colored log levels (optional — used by log_msg if it
         # inserts with tags like "INFO", "ERROR", "SUCCESS").
         try:
-            self.log_area.tag_configure("ERROR", foreground="#ff6b6b")
-            self.log_area.tag_configure("SUCCESS", foreground="#51cf66")
-            self.log_area.tag_configure("WARNING", foreground="#ffd43b")
+            self.log_area.tag_configure("ERROR", foreground=self.colors["log_error"])
+            self.log_area.tag_configure("SUCCESS", foreground=self.colors["log_success"])
+            self.log_area.tag_configure("WARNING", foreground=self.colors["log_warning"])
             self.log_area.tag_configure("INFO", foreground=self.colors["log_fg"])
         except Exception:
             pass
@@ -6168,6 +6174,12 @@ class VidaPayTransferApp(tk.Tk):
                             fg=self.colors["log_fg"],
                             insertbackground=self.colors["log_fg"],
                         )
+                        # Level colors follow the theme too - yellow/green
+                        # tags are unreadable on the light log background.
+                        widget.tag_configure("ERROR", foreground=self.colors["log_error"])
+                        widget.tag_configure("SUCCESS", foreground=self.colors["log_success"])
+                        widget.tag_configure("WARNING", foreground=self.colors["log_warning"])
+                        widget.tag_configure("INFO", foreground=self.colors["log_fg"])
                     else:
                         widget.configure(
                             bg=self.colors["input"],
