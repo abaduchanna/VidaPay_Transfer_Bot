@@ -107,6 +107,12 @@ class FixedHeaderManager:
         self.title_label._tag   = "header"
         self.divider_frame._tag = "header"
     
+        # Visible website/WiFi Transfer ring + orb animation in the header.
+        try:
+            from branding_runtime import install_header_animation
+            install_header_animation(self)
+        except Exception:
+            pass
     def set_logo(self, logo_path=None, text="Logo"):
         """Set the logo in the header."""
         if logo_path and os.path.exists(logo_path):
