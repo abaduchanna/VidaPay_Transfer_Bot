@@ -6090,6 +6090,14 @@ class VidaPayTransferApp(tk.Tk):
             font=("Segoe UI", 9, "bold"),
             relief="flat",
         )
+        # Pin EVERY heading state to the same navy/white. Without an explicit
+        # "active" map, clam's built-in heading hover flashes light-gray — the
+        # "hover walk" seen on the Store Mapping and Transfer Logs headers.
+        style.map(
+            "Treeview.Heading",
+            background=[("active", c["navy"]), ("pressed", c["navy"]), ("!active", c["navy"])],
+            foreground=[("active", "#ffffff"), ("pressed", "#ffffff"), ("!active", "#ffffff")],
+        )
         style.map(
             "Treeview",
             background=[("selected", c["red"])],
