@@ -5244,7 +5244,7 @@ class VidaPayTransferApp(tk.Tk):
         if logo_path and self.logo_handler.load_logo_from_file(logo_path, width=285, height=60, bg=BRAND_NAVY):
             self.logo_handler.pack(anchor="w")
         else:
-            self.logo_handler.create_text_placeholder("VIDAPAY", color=BRAND_RED, size=22, bg=BRAND_NAVY)
+            self.logo_handler.create_text_placeholder("3SVERSE", color=BRAND_RED, size=22, bg=BRAND_NAVY)
             self.logo_handler.pack(anchor="w")
         if getattr(self.logo_handler, "logo_widget", None) is not None:
             self.logo_handler.logo_widget._tag = "header_label"
