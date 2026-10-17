@@ -7241,6 +7241,15 @@ if __name__ == "__main__":
         pass
     _enable_dpi_awareness()
     app = VidaPayTransferApp()
+    # 3SVerse auto-update prompt (fail-silent; frozen builds only)
+    try:
+        import update_checker as _upd
+        _upd.check_async(
+            app, app_id="VidaPay Transfer Bot",
+            repo="abaduchanna/VidaPay_Transfer_Bot",
+            asset_name="VidaPay_Transfer_Bot.exe")
+    except Exception:
+        pass
     app.after(10, lambda: app.state("zoomed"))
     try:
         app.mainloop()
