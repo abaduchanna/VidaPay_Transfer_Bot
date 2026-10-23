@@ -280,6 +280,11 @@ from selenium.common.exceptions import (
     InvalidSessionIdException,
 )
 
+# --- 3SVerse license gate (AI-copy protection retrofit t192) ---
+import license_core as _lic3sv
+if not _lic3sv.ensure_licensed():
+    raise SystemExit(0)
+
 # ============================================================================
 # CONFIGURATION & CONSTANTS
 # ============================================================================
