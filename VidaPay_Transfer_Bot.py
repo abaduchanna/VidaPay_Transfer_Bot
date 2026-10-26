@@ -407,6 +407,12 @@ REPLY_CHECK_INTERVAL_SECONDS = 15
 # polls every few seconds; 30 s is the upper bound before giving up.
 HUMAN_VERIFY_WAIT_SECONDS = 30
 
+# 2FA approval wait: once the "2-Factor Authentication" page appears, the bot
+# waits this many seconds for the IBM Verify / authenticator approval. If not
+# approved in time, sign-in fails fast instead of hanging until the full
+# sign-in timeout (420 s). Owner rule: 15-20 s max for a stuck 2FA.
+TWO_FA_WAIT_SECONDS = 20
+
 CRM_MAIN_PANEL_URL = "https://www.vidapaycrm.com/Main%20Panel.aspx"
 CRM_LOGIN_URL = "https://www.vidapaycrm.com/Login.aspx"
 
@@ -2724,6 +2730,7 @@ class VidapayTransferSystem:
         started_at = time.time()
         last_state = None
         two_factor_logged = False
+        two_fa_deadline = None
         trust_clicked = False
         setup_next_clicks = 0
         ready_clicked = False
@@ -2798,10 +2805,18 @@ class VidapayTransferSystem:
             if self._page_has_h3("2-Factor Authentication"):
                 if not two_factor_logged:
                     self.log(
-                        "2-Factor Authentication detected. "
-                        "Please approve in IBM Verify / authenticator app."
+                        f"2-Factor Authentication detected. Waiting up to "
+                        f"{TWO_FA_WAIT_SECONDS}s for approval in IBM Verify / "
+                        "authenticator app."
                     )
                     two_factor_logged = True
+                    two_fa_deadline = time.time() + TWO_FA_WAIT_SECONDS
+                if two_fa_deadline is not None and time.time() > two_fa_deadline:
+                    self.log(
+                        f"2FA not approved within {TWO_FA_WAIT_SECONDS}s — "
+                        "giving up sign-in (fail-fast)."
+                    )
+                    return False
                 time.sleep(2)
                 continue
 
