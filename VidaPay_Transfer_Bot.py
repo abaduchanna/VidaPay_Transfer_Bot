@@ -7271,6 +7271,18 @@ def _force_maximized(window):
             pass
 
 
+def _close_pyi_splash():
+    """Close the PyInstaller splash screen (frozen onefile builds only).
+
+    Called once the main window is fully built and shown; harmless no-op
+    in dev runs (pyi_splash only exists inside PyInstaller builds)."""
+    try:
+        import pyi_splash  # type: ignore
+        pyi_splash.close()
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
     # AppUserModelID MUST be set before VidaPayTransferApp() — that class
     # inherits tk.Tk so the window is created during instantiation.
@@ -7292,6 +7304,7 @@ if __name__ == "__main__":
     except Exception:
         pass
     _force_maximized(app)
+    _close_pyi_splash()
     try:
         app.mainloop()
     except SystemExit:

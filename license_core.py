@@ -1850,6 +1850,35 @@ def _watchdog_start(license_id):
     threading.Thread(target=_loop, daemon=True).start()
 
 
+LAUNCH_VERIFY_DEADLINE_SECONDS = 6.0
+
+
+def _bounded_call(fn, deadline_seconds):
+    """Run fn in a daemon thread under a hard wall-clock deadline.
+
+    The launch-time license verify must never stall the app open:
+    urllib's timeout does not cover DNS resolution (getaddrinfo has no
+    timeout), so a slow or broken DNS server could otherwise block the
+    GUI from ever appearing. Past the deadline the call is treated as
+    offline and fails open (same policy as a network failure)."""
+    box = {}
+
+    def _run():
+        try:
+            box["r"] = fn()
+        except BaseException as exc:  # noqa: BLE001 - re-raised below
+            box["e"] = exc
+
+    worker = threading.Thread(target=_run, daemon=True)
+    worker.start()
+    worker.join(deadline_seconds)
+    if worker.is_alive():
+        return None
+    if "e" in box:
+        raise box["e"]
+    return box.get("r")
+
+
 def ensure_licensed():
     """Return True when the app may run (activated or trial active)."""
     frozen = bool(getattr(sys, "frozen", False))
@@ -1872,7 +1901,9 @@ def ensure_licensed():
         # Re-verify at EVERY launch (was: every HEARTBEAT_DAYS) - a
         # license the seller released or revoked must stop working at
         # the next start, not a week later. Offline stays fail-open.
-        state = server_verify(lid, lic=rec.get("license"), timeout=4)
+        state = _bounded_call(
+            lambda: server_verify(lid, lic=rec.get("license"), timeout=4),
+            LAUNCH_VERIFY_DEADLINE_SECONDS)
         if state in ("revoked", "moved", "removed"):
             clear_activation()
             why = ("revoked by the seller" if state == "revoked"
@@ -1908,7 +1939,8 @@ def ensure_licensed():
 
     if notice is None:
         # no valid activation -> trial (server-synced against reinstall reset)
-        trial_server_sync()
+        _bounded_call(lambda: trial_server_sync(),
+                      LAUNCH_VERIFY_DEADLINE_SECONDS)
         expired, days_left = trial_status()
         if not expired:
             label = _trial_label(days_left)
