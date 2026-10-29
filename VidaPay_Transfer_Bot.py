@@ -7250,6 +7250,27 @@ def _enable_dpi_awareness() -> None:
         pass
 
 
+def _force_maximized(window):
+    """Always open the window MAXIMIZED (user request) and KEEP it maximized
+    while the window maps. Tk silently drops the zoomed state when it is set
+    while the window is still being mapped — the reason the old single
+    after(10ms) zoom sometimes opened the window un-maximized. The zoomed
+    state is therefore re-asserted several times across the first second."""
+    def _zoom():
+        try:
+            window.state("zoomed")
+        except Exception:
+            try:
+                window.attributes("-zoomed", True)
+            except Exception:
+                pass
+    for _delay in (10, 80, 250, 600):
+        try:
+            window.after(_delay, _zoom)
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
     # AppUserModelID MUST be set before VidaPayTransferApp() — that class
     # inherits tk.Tk so the window is created during instantiation.
@@ -7270,7 +7291,7 @@ if __name__ == "__main__":
             asset_name="VidaPay_Transfer_Bot.exe")
     except Exception:
         pass
-    app.after(10, lambda: app.state("zoomed"))
+    _force_maximized(app)
     try:
         app.mainloop()
     except SystemExit:
