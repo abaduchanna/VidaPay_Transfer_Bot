@@ -114,26 +114,68 @@ def _fetch_fingerprint(repo, asset_name):
     return None
 
 
-def _download(url, dest_path):
+def _download(url, dest_path, attempts=3):
+    """Hardened single-stream download - a half-fetched update can never
+    install. Streams to <dest>.part, verifies the byte count against
+    Content-Length (a truncated/snatched .part is the #1 failure mode -
+    AV and cleanup tools grab freshly written files mid-stream), resumes
+    an interrupted attempt via a Range request when possible, and retries
+    whatever fails. MZ magic is re-checked on every attempt."""
     import urllib.request
 
-    req = urllib.request.Request(url)
-    req.add_header("User-Agent", "3SVerse-UpdateChecker/1.0")
-    with urllib.request.urlopen(req, timeout=_DL_TIMEOUT) as r, \
-            open(dest_path + ".part", "wb") as f:
-        while True:
-            chunk = r.read(65536)
-            if not chunk:
+    last_err = None
+    for attempt in range(1, max(1, attempts) + 1):
+        part = dest_path + ".part"
+        try:
+            offset = 0
+            if attempt > 1 and os.path.exists(part):
+                try:
+                    offset = os.path.getsize(part)
+                except Exception:
+                    offset = 0
+                if offset < _MIN_BYTES:
+                    offset = 0
+            headers = {"User-Agent": "3SVerse-UpdateChecker/1.0"}
+            if offset:
+                headers["Range"] = "bytes=%d-" % offset
+            req = urllib.request.Request(url, headers=headers)
+            expected = 0
+            with urllib.request.urlopen(req, timeout=_DL_TIMEOUT) as r:
+                if offset and r.status != 206:
+                    offset = 0        # server ignored Range - restart clean
+                try:
+                    expected = int(r.headers.get("Content-Length") or 0)
+                except Exception:
+                    expected = 0
+                with open(part, "ab" if offset else "wb") as f:
+                    while True:
+                        chunk = r.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+            size = os.path.getsize(part) if os.path.exists(part) else 0
+            got = size - offset
+            if expected and got != expected:
+                raise ValueError("truncated download (%d of %d bytes)"
+                                 % (got, expected))
+            if size < _MIN_BYTES:
+                raise ValueError("download too small")
+            os.replace(part, dest_path)
+            with open(dest_path, "rb") as f:
+                if f.read(2) != b"MZ":
+                    raise ValueError("not a Windows exe")
+            return dest_path
+        except Exception as e:
+            last_err = e
+            if attempt >= max(1, attempts):
                 break
-            f.write(chunk)
-    os.replace(dest_path + ".part", dest_path)
-    # sanity: size floor + MZ magic (Windows PE)
-    if os.path.getsize(dest_path) < _MIN_BYTES:
-        raise ValueError("download too small")
-    with open(dest_path, "rb") as f:
-        if f.read(2) != b"MZ":
-            raise ValueError("not a Windows exe")
-    return dest_path
+            time.sleep(1.0)
+    try:
+        if os.path.exists(dest_path + ".part"):
+            os.remove(dest_path + ".part")
+    except Exception:
+        pass
+    raise last_err if last_err else OSError("download failed")
 
 
 def _updater_bat_text(exe_path, new_path):

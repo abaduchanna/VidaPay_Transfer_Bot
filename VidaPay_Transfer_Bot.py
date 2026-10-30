@@ -281,6 +281,15 @@ from selenium.common.exceptions import (
 )
 
 # --- 3SVerse license gate (AI-copy protection retrofit t192) ---
+# The PyInstaller boot splash is always-on-top: if it is still up when the
+# activation window opens, it sits OVER the gate and swallows every click
+# (owner: "splash khuli hai to Trial pe click nahi hota"). Close it first -
+# the gate is the first interactive screen, so the splash's job is done.
+try:
+    import pyi_splash as _pyi_boot_splash
+    _pyi_boot_splash.close()
+except Exception:
+    pass
 import license_core as _lic3sv
 if not _lic3sv.ensure_licensed():
     raise SystemExit(0)
@@ -521,18 +530,46 @@ def _run_cmd_quiet(cmd, timeout=300):
         return False, str(e)
 
 
-def _download_file(url, dest, log, timeout=240):
-    try:
-        log("Downloading %s ..." % os.path.basename(url))
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp, open(
-            dest, "wb"
-        ) as out:
-            shutil.copyfileobj(resp, out)
-        return os.path.isfile(dest) and os.path.getsize(dest) > 0
-    except Exception as e:
-        log("Download failed: %s" % e)
-        return False
+def _download_file(url, dest, log, timeout=240, attempts=3):
+    """Hardened download: stream to <dest>.part, verify the byte count
+    against Content-Length, then atomic-rename. A truncated or snatched
+    .part (antivirus grabs freshly written files mid-stream) can never
+    land as <dest>; failed attempts retry with a clean .part."""
+    part = dest + ".part"
+    last_err = None
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            log("Downloading %s%s ..." % (
+                os.path.basename(url),
+                "" if attempt == 1 else " (retry %d)" % (attempt - 1)))
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "Mozilla/5.0"})
+            expected = 0
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                try:
+                    expected = int(resp.headers.get("Content-Length") or 0)
+                except Exception:
+                    expected = 0
+                with open(part, "wb") as out:
+                    shutil.copyfileobj(resp, out)
+            size = os.path.getsize(part) if os.path.exists(part) else 0
+            if expected and size != expected:
+                raise ValueError("truncated download (%d of %d bytes)"
+                                 % (size, expected))
+            if size <= 0:
+                raise ValueError("empty download")
+            os.replace(part, dest)
+            return True
+        except Exception as e:
+            last_err = e
+            try:
+                if os.path.exists(part):
+                    os.remove(part)
+            except Exception:
+                pass
+            time.sleep(1.0)
+    log("Download failed: %s" % last_err)
+    return False
 
 
 def load_config():

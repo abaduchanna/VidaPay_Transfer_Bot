@@ -1312,8 +1312,10 @@ def activate_with_license_key(key_text):
     if not key:
         return False, "Type or paste your license key first.", None, ""
     if not _ledger_ready():
-        return False, ("Activation service is not configured. Internet "
-                       "is required for the first activation."), None, ""
+        return False, ("This build cannot verify license keys online - "
+                       "use 'Select License File...' with the .lic file "
+                       "you received (it activates offline), or run the "
+                       "full build to activate with a key."), None, ""
     try:
         rec, _sha = _ledger_get(key)
     except _LedgerDown:
@@ -1637,11 +1639,14 @@ def _show_activation_window(notice=None, trial_label=None):
                           font=("Segoe UI", 8))
     mid_status.pack(anchor="w", padx=10, pady=(0, 6))
 
-    # license file (paid builds only - needs the ledger token)
+    # license file + key entry - shown in EVERY build. A token-less trial
+    # build verifies a machine-pinned .lic file fully OFFLINE (signature +
+    # machine pin against the embedded public key); license KEYS need the
+    # online ledger, so those activate in the full build. Hiding the
+    # activation controls in trial builds made unlock impossible there.
     lic_box = panel()
-    if ledger_on:
-        lic_box.pack(fill="x", **pad, pady=(12, 0))
-    else:
+    lic_box.pack(fill="x", **pad, pady=(12, 0))
+    if not ledger_on:
         buy_box = panel()
         buy_box.pack(fill="x", **pad, pady=(12, 0))
         tk.Label(buy_box, text="FREE TRIAL BUILD", bg=_PANEL, fg=_WARN,
@@ -1701,8 +1706,7 @@ def _show_activation_window(notice=None, trial_label=None):
 
     # license key entry - no .lic file required (paid builds only)
     key_box = panel()
-    if ledger_on:
-        key_box.pack(fill="x", **pad, pady=(12, 0))
+    key_box.pack(fill="x", **pad, pady=(12, 0))
     tk.Label(key_box, text="Or type your license key "
                            "(VP3S-XXXX-XXXX-XXXX-XXXX):",
              bg=_PANEL, fg=_DIM, font=("Segoe UI", 9)).pack(
