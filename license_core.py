@@ -1527,7 +1527,28 @@ _OK = "#c7ef70"          # brand lime - success
 _WARN = "#f5c518"
 
 
+def _close_boot_splash():
+    """Close the PyInstaller boot splash (no-op outside frozen builds).
+    Called right before ANY dialog is created: the splash is always-on-top
+    and would otherwise cover the dialog and swallow its clicks."""
+    try:
+        import pyi_splash  # type: ignore
+        pyi_splash.close()
+    except Exception:
+        pass
+
+
+def _boot_status(text):
+    """Update the boot-splash status line (no-op outside frozen builds)."""
+    try:
+        import pyi_splash  # type: ignore
+        pyi_splash.update_text(text)
+    except Exception:
+        pass
+
+
 def _msgbox(kind, title, text):
+    _close_boot_splash()
     try:
         import tkinter as tk
         from tkinter import messagebox
@@ -1547,6 +1568,7 @@ def _show_activation_window(notice=None, trial_label=None):
     the user continues an active trial. trial_label is the human-readable
     remaining-time string shown on the Continue Trial button (never shown
     for an expired trial)."""
+    _close_boot_splash()
     import tkinter as tk
     result = {"ok": False}
     # Token-less (public trial) builds cannot reach the ledger, so the
@@ -1886,6 +1908,7 @@ def _bounded_call(fn, deadline_seconds):
 def ensure_licensed():
     """Return True when the app may run (activated or trial active)."""
     frozen = bool(getattr(sys, "frozen", False))
+    _boot_status("Checking license...")
 
     if frozen and debugger_present():
         _exit_note("anti-tamper: debugger detected at launch")
@@ -1901,6 +1924,7 @@ def ensure_licensed():
 
     rec = load_activation()
     if rec:
+        _boot_status("Verifying license...")
         lid = rec.get("license_id")
         # Re-verify at EVERY launch (was: every HEARTBEAT_DAYS) - a
         # license the seller released or revoked must stop working at
@@ -1919,6 +1943,7 @@ def ensure_licensed():
                 "This license was %s. Contact %s "
                 "if you believe this is a mistake." % (why, _BRAND))
         _watchdog_start(lid)
+        _boot_status("Loading VidaPay...")
         rec["last_verify"] = int(time.time())
         save_activation(rec)
         return True

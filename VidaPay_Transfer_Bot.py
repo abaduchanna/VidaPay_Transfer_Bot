@@ -285,11 +285,7 @@ from selenium.common.exceptions import (
 # activation window opens, it sits OVER the gate and swallows every click
 # (owner: "splash khuli hai to Trial pe click nahi hota"). Close it first -
 # the gate is the first interactive screen, so the splash's job is done.
-try:
-    import pyi_splash as _pyi_boot_splash
-    _pyi_boot_splash.close()
-except Exception:
-    pass
+# (splash stays up; license_core closes it only before showing a dialog)
 import license_core as _lic3sv
 if not _lic3sv.ensure_licensed():
     raise SystemExit(0)
@@ -5218,6 +5214,9 @@ class WhatsAppScraper:
 class VidaPayTransferApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        # ANTI-FLASH: stay hidden while the whole UI is built; the window is
+        # shown once, fully rendered and already maximized (_show_main_window).
+        self.withdraw()
 
         # Route background-thread crash messages into the on-screen log box
         try:
@@ -5269,6 +5268,47 @@ class VidaPayTransferApp(tk.Tk):
         self.after(100, self._process_log_queue)
         # Check-and-install OCR dependencies in the background
         threading.Thread(target=self._auto_setup_deps, daemon=True).start()
+        self._show_main_window()
+
+    def _show_main_window(self):
+        """Show the fully-built window maximized, exactly once. The geometry
+        is first set to the whole work area (taskbar respected) so even the
+        first paint looks maximized, then 'zoomed' is applied before AND
+        after the window maps (Tk can silently drop it while mapping)."""
+        try:
+            self.update_idletasks()
+            sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+            w, h, x, y = sw, max(0, sh - 48), 0, 0
+            try:
+                import ctypes
+
+                class _RECT(ctypes.Structure):
+                    _fields_ = [("l", ctypes.c_long), ("t", ctypes.c_long),
+                                ("r", ctypes.c_long), ("b", ctypes.c_long)]
+
+                _r = _RECT()
+                if ctypes.windll.user32.SystemParametersInfoW(
+                        0x0030, 0, ctypes.byref(_r), 0):  # SPI_GETWORKAREA
+                    w, h, x, y = _r.r - _r.l, _r.b - _r.t, _r.l, _r.t
+            except Exception:
+                pass
+            self.geometry(f"{max(640, min(w, sw))}x{max(480, min(h, sh))}"
+                          f"+{max(0, x)}+{max(0, y)}")
+            self.minsize(min(1020, max(560, sw // 2)),
+                         min(700, max(420, sh // 2)))
+            self.resizable(True, True)
+        except Exception:
+            pass
+        try:
+            self.state("zoomed")
+        except Exception:
+            pass
+        try:
+            self.deiconify()
+            self.lift()
+            self.state("zoomed")
+        except Exception:
+            pass
 
     def build_header(self):
         """Header ported from VidaPay Incentive Extractor: logo on the left
@@ -7330,6 +7370,11 @@ if __name__ == "__main__":
     except Exception:
         pass
     _enable_dpi_awareness()
+    try:
+        import pyi_splash as _ps  # type: ignore
+        _ps.update_text("Loading interface...")
+    except Exception:
+        pass
     app = VidaPayTransferApp()
     # 3SVerse auto-update prompt (fail-silent; frozen builds only)
     try:
