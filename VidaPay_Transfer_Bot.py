@@ -25,6 +25,43 @@ except ImportError:
     print("ERROR: tkinter not available. Install Python from python.org (not Microsoft Store).")
     sys.exit(1)
 from theme_manager import ThemeManager, apply_theme_to_window, get_copyright_year
+# ---------------------------------------------------------------------------
+# Packaged-app safety: when running as a PyInstaller .exe, sys.executable is the
+# app itself (not python). Library code that tries to `pip install ...` via
+# sys.executable would silently RELAUNCH the GUI (a second window). Block those
+# calls in frozen mode so STT/dependency fallbacks fail gracefully instead.
+# ---------------------------------------------------------------------------
+try:
+    import subprocess as _vp_subprocess
+    if getattr(sys, "frozen", False):
+        _vp__run, _vp__popen, _vp__call = (_vp_subprocess.run,
+                                           _vp_subprocess.Popen,
+                                           _vp_subprocess.check_call)
+        def _vp__is_pip(cmd):
+            try:
+                return (isinstance(cmd, (list, tuple)) and len(cmd) >= 3
+                        and str(cmd[0]) == sys.executable
+                        and cmd[1] == "-m" and str(cmd[2]) == "pip")
+            except Exception:
+                return False
+        def _vp_run_guard(cmd, *a, **k):
+            if _vp__is_pip(cmd):
+                raise RuntimeError("pip install disabled in packaged app")
+            return _vp__run(cmd, *a, **k)
+        def _vp_popen_guard(cmd, *a, **k):
+            if _vp__is_pip(cmd):
+                raise RuntimeError("pip install disabled in packaged app")
+            return _vp__popen(cmd, *a, **k)
+        def _vp_call_guard(cmd, *a, **k):
+            if _vp__is_pip(cmd):
+                raise RuntimeError("pip install disabled in packaged app")
+            return _vp__call(cmd, *a, **k)
+        _vp_subprocess.run = _vp_run_guard
+        _vp_subprocess.Popen = _vp_popen_guard
+        _vp_subprocess.check_call = _vp_call_guard
+except Exception:
+    pass
+
 import theme_manager as _vp_tm
 _vp_tm.install_pro_widgets()  # slim themed scrollbars (must run before the UI is built)
 from logo_handler import LogoHandler

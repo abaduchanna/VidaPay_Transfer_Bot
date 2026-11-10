@@ -34,6 +34,31 @@ _MAX_WAIT_EXIT_S = 30                # updater bat waits max this long
 
 _CREATE_NO_WINDOW = 0x08000000
 
+# PyInstaller (onefile) leaks bootloader state into child processes through these
+# environment variables. If the updater .bat is started from the running exe and
+# then launches the NEW exe, the new exe's bootloader inherits them, "adopts" the
+# OLD exe's extraction folder (_MEIxxxxxx) and crashes with
+#   "Failed to load Python DLL ...\_MEIxxxxxx\python311.dll"
+# as soon as the old process exits and that folder is deleted. Always start the
+# updater / the new exe with a clean environment.
+# Self-updating is OFF by default. Replacing and restarting the exe from inside
+# itself caused the PyInstaller "Failed to load Python DLL ...\_MEIxxxxxx\python311.dll"
+# crash on some PCs. New builds are installed by simply running the new exe.
+# (Opt-in for testing only: set the environment variable VIDAPAY_AUTO_UPDATE=1.)
+AUTO_UPDATE_ENABLED = os.environ.get("VIDAPAY_AUTO_UPDATE", "") == "1"
+
+_PYI_ENV_VARS = ("_MEIPASS2", "_PYI_APPLICATION_HOME_DIR", "_PYI_ARCHIVE_FILE",
+                 "_PYI_PARENT_PROCESS_LEVEL", "_PYI_SPLASH_IPC", "_PYI_ONEDIR_MODE")
+
+
+def _clean_env():
+    env = dict(os.environ)
+    for k in _PYI_ENV_VARS:
+        env.pop(k, None)
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"   # PyInstaller >= 6.9: force a fresh start
+    return env
+
+
 
 def _state_dir():
     base = os.environ.get("APPDATA") or os.path.expanduser("~")
@@ -183,6 +208,13 @@ def _updater_bat_text(exe_path, new_path):
     return "\r\n".join([
         "@echo off",
         "setlocal enabledelayedexpansion",
+        # never let the new exe inherit the OLD exe's PyInstaller extraction folder
+        'set "_MEIPASS2="',
+        'set "_PYI_APPLICATION_HOME_DIR="',
+        'set "_PYI_ARCHIVE_FILE="',
+        'set "_PYI_PARENT_PROCESS_LEVEL="',
+        'set "_PYI_SPLASH_IPC="',
+        'set "PYINSTALLER_RESET_ENVIRONMENT=1"',
         'set "EXE=' + exe_name + '"',
         "set /a tries=0",
         ":waitloop",
@@ -203,6 +235,7 @@ def _updater_bat_text(exe_path, new_path):
         "if errorlevel 1 (",
         '  move /y "' + exe_path + '.old" "' + exe_path + '" >nul 2>&1',
         ") else (",
+        '  timeout /t 2 /nobreak >nul',
         '  start "" "' + exe_path + '"',
         '  del /f /q "' + exe_path + '.old" >nul 2>&1',
         ")",
@@ -226,7 +259,7 @@ def _apply_update(exe_path, new_path, root):
     kwargs = {}
     if os.name == "nt":
         kwargs["creationflags"] = _CREATE_NO_WINDOW
-    subprocess.Popen([bat_path], close_fds=True, **kwargs)
+    subprocess.Popen([bat_path], close_fds=True, env=_clean_env(), **kwargs)
     try:
         root.after(120, os._exit, 0)
     except Exception:
@@ -333,6 +366,8 @@ def _worker(root, app_id, repo, tag, asset_name, delay):
 
 def check_async(root, app_id, repo, asset_name, tag="latest", delay=25):
     """Call once at startup. Silent no-op on any error / dev machines."""
+    if not AUTO_UPDATE_ENABLED:
+        return                           # self-update disabled (see AUTO_UPDATE_ENABLED)
     try:
         t = threading.Thread(
             target=_worker,
