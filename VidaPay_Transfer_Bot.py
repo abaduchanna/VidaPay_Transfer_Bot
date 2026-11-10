@@ -25,6 +25,8 @@ except ImportError:
     print("ERROR: tkinter not available. Install Python from python.org (not Microsoft Store).")
     sys.exit(1)
 from theme_manager import ThemeManager, apply_theme_to_window, get_copyright_year
+import theme_manager as _vp_tm
+_vp_tm.install_pro_widgets()  # slim themed scrollbars (must run before the UI is built)
 from logo_handler import LogoHandler
 from tkinter import ttk, messagebox, scrolledtext, filedialog
 
@@ -7358,6 +7360,22 @@ def _close_pyi_splash():
         pyi_splash.close()
     except Exception:
         pass
+
+
+# ---- 3SVerse pro look: one polish pass after every theme apply -------------
+try:
+    _vp_orig_apply_theme = VidaPayTransferApp._apply_theme
+
+    def _vp_apply_theme_pro(self, *a, **k):
+        r = _vp_orig_apply_theme(self, *a, **k)
+        try:
+            _vp_tm.polish_ui(self, getattr(self, "colors", None))
+        except Exception:
+            pass
+        return r
+    VidaPayTransferApp._apply_theme = _vp_apply_theme_pro
+except Exception:
+    pass
 
 
 if __name__ == "__main__":

@@ -342,3 +342,365 @@ def create_toggle_canvas(parent, theme_manager, on_click, size=36, bg="#090d26")
     canvas._tag = "header"
     render()
     return canvas
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PRO UI LAYER (3SVerse design system) - one polish pass shared by every app.
+#   * flat primary / secondary buttons with real hover + pressed states
+#   * 1px hairline inputs with an accent focus ring and comfortable padding
+#   * flat table headings, taller rows, accent selection
+#   * accent-topped notebook tabs, thin progress bar
+#   * slim dark ttk scrollbars (replaces the bulky native ones)
+#   * one font family (Segoe UI) with a monospace log font
+# Call install_pro_widgets() BEFORE building the UI and polish_ui(root, colors)
+# after every theme apply. Everything is wrapped in try/except: styling must
+# never be able to break an app.
+# ════════════════════════════════════════════════════════════════════════════
+_PRO_FONT = "Segoe UI"
+_PRO_MONO = "Consolas"
+_PRO_PRIMARY_TEXTS = ("start filing", "start automation", "run now", "run all stores",
+                      "save all settings", "save all info")
+
+
+def install_pro_widgets():
+    """Swap the bulky native tk.Scrollbar for a themeable slim ttk one."""
+    import tkinter as tk
+    from tkinter import ttk
+
+    if getattr(tk, "_vp_pro_scrollbar", False):
+        return
+
+    class _ProScrollbar(ttk.Scrollbar):
+        _DROP = ("bg", "background", "troughcolor", "activebackground", "width",
+                 "relief", "bd", "borderwidth", "highlightthickness",
+                 "highlightbackground", "highlightcolor", "elementborderwidth",
+                 "jump", "activerelief", "repeatdelay", "repeatinterval")
+
+        def __init__(self, master=None, **kw):
+            for k in self._DROP:
+                kw.pop(k, None)
+            ttk.Scrollbar.__init__(self, master, **kw)
+
+        def configure(self, cnf=None, **kw):
+            for k in self._DROP:
+                kw.pop(k, None)
+            if isinstance(cnf, dict):
+                cnf = {k: v for k, v in cnf.items() if k not in self._DROP}
+            return ttk.Scrollbar.configure(self, cnf, **kw)
+        config = configure
+
+    tk.Scrollbar = _ProScrollbar
+    try:
+        import tkinter.scrolledtext as _st
+        _st.Scrollbar = _ProScrollbar
+    except Exception:
+        pass
+    tk._vp_pro_scrollbar = True
+
+
+def _pro_rgb(widget, color):
+    try:
+        r, g, b = widget.winfo_rgb(color)
+        return r // 257, g // 257, b // 257
+    except Exception:
+        return 0, 0, 0
+
+
+def _pro_mix(widget, a, b, t):
+    ra, ga, ba = _pro_rgb(widget, a)
+    rb, gb, bb = _pro_rgb(widget, b)
+    return "#%02x%02x%02x" % (round(ra + (rb - ra) * t), round(ga + (gb - ga) * t),
+                              round(ba + (bb - ba) * t))
+
+
+def _pro_font(font, family=None, min_size=None, weight=None):
+    """Normalise a Tk font spec to the app family, keeping size/weight."""
+    import tkinter.font as tkfont
+    try:
+        f = tkfont.Font(font=font)
+        size = abs(int(f.actual("size")))
+        bold = f.actual("weight") == "bold"
+    except Exception:
+        size, bold = 10, False
+    if min_size and size < min_size:
+        size = min_size
+    w = weight or ("bold" if bold else "normal")
+    return (family or _PRO_FONT, size, w)
+
+
+def polish_ui(root, colors=None):
+    """Apply the 3SVerse pro look to `root` and every child widget."""
+    import tkinter as tk
+    from tkinter import ttk
+    import tkinter.font as tkfont
+
+    try:
+        c = dict(colors or {})
+        bg = c.get("bg") or root.cget("bg")
+        panel = c.get("panel") or bg
+        alt = c.get("panel_alt") or panel
+        text = c.get("text") or "#e8ecf7"
+        dim = c.get("text_dim") or text
+        accent = c.get("red") or c.get("accent") or "#f0541c"
+        inputbg = c.get("input") or alt
+        hair = _pro_mix(root, panel, text, 0.16)
+        hair_soft = _pro_mix(root, panel, text, 0.09)
+        alt_hover = _pro_mix(root, alt, text, 0.09)
+        accent_hover = _pro_mix(root, accent, "#000000", 0.12)
+        accent_press = _pro_mix(root, accent, "#000000", 0.24)
+        sel_bg = _pro_mix(root, panel, accent, 0.38)
+        on_accent = "#ffffff"
+    except Exception:
+        return
+
+    # ---- named fonts: one family everywhere -------------------------------
+    try:
+        for name, size in (("TkDefaultFont", 10), ("TkTextFont", 10), ("TkMenuFont", 10),
+                           ("TkHeadingFont", 10), ("TkCaptionFont", 10),
+                           ("TkSmallCaptionFont", 9), ("TkIconFont", 10),
+                           ("TkTooltipFont", 9)):
+            tkfont.nametofont(name).configure(family=_PRO_FONT, size=size)
+        tkfont.nametofont("TkFixedFont").configure(family=_PRO_MONO, size=10)
+    except Exception:
+        pass
+
+    # ---- ttk styles --------------------------------------------------------
+    try:
+        st = ttk.Style(root)
+        try:
+            st.theme_use("clam")
+        except Exception:
+            pass
+        st.configure("TNotebook", background=bg, borderwidth=0, tabmargins=(0, 6, 0, 0))
+        st.configure("TNotebook.Tab", background=bg, foreground=dim, padding=(20, 8),
+                     borderwidth=0, font=(_PRO_FONT, 10, "bold"),
+                     lightcolor=bg, darkcolor=bg, bordercolor=bg)
+        st.map("TNotebook.Tab",
+               background=[("selected", panel), ("active", alt)],
+               foreground=[("selected", text), ("active", text)],
+               lightcolor=[("selected", accent), ("active", alt)],
+               darkcolor=[("selected", panel), ("active", alt)],
+               bordercolor=[("selected", panel), ("active", alt)],
+               expand=[("selected", (0, 0, 0, 0))])
+        st.configure("Treeview", background=panel, fieldbackground=panel, foreground=text,
+                     rowheight=28, borderwidth=0, bordercolor=hair, lightcolor=panel,
+                     darkcolor=panel, font=(_PRO_FONT, 10))
+        st.map("Treeview", background=[("selected", sel_bg)],
+               foreground=[("selected", text)])
+        # Panel / table headers stay DARK NAVY with white text in BOTH themes and
+        # never change on hover or press (no "hover walk").
+        navy = c.get("navy") or "#090d26"
+        st.configure("Treeview.Heading", background=navy, foreground="#ffffff", relief="flat",
+                     borderwidth=0, padding=(12, 9), font=(_PRO_FONT, 9, "bold"),
+                     lightcolor=navy, darkcolor=navy, bordercolor=navy)
+        st.map("Treeview.Heading",
+               background=[("active", navy), ("pressed", navy), ("!active", navy)],
+               foreground=[("active", "#ffffff"), ("pressed", "#ffffff"), ("!active", "#ffffff")],
+               lightcolor=[("active", navy), ("pressed", navy), ("!active", navy)],
+               darkcolor=[("active", navy), ("pressed", navy), ("!active", navy)],
+               bordercolor=[("active", navy), ("pressed", navy), ("!active", navy)])
+        st.configure("Horizontal.TProgressbar", thickness=8, troughcolor=alt,
+                     background=accent, lightcolor=accent, darkcolor=accent,
+                     bordercolor=alt, borderwidth=0)
+        st.configure("TCombobox", fieldbackground=inputbg, background=alt, foreground=text,
+                     arrowcolor=dim, bordercolor=hair, lightcolor=hair, darkcolor=hair,
+                     padding=5, arrowsize=14)
+        st.map("TCombobox", bordercolor=[("focus", accent)], lightcolor=[("focus", accent)],
+               darkcolor=[("focus", accent)],
+               fieldbackground=[("readonly", inputbg)], foreground=[("readonly", text)])
+        st.configure("TEntry", fieldbackground=inputbg, foreground=text, bordercolor=hair,
+                     lightcolor=hair, darkcolor=hair, padding=5)
+        st.map("TEntry", bordercolor=[("focus", accent)], lightcolor=[("focus", accent)],
+               darkcolor=[("focus", accent)])
+
+        st.configure("TButton", background=_pro_mix(root, panel, text, 0.10), foreground=text,
+                     bordercolor=hair, lightcolor=_pro_mix(root, panel, text, 0.10),
+                     darkcolor=_pro_mix(root, panel, text, 0.10), focuscolor=panel,
+                     padding=(14, 6), relief="flat", borderwidth=1, font=(_PRO_FONT, 10, "bold"))
+        st.map("TButton",
+               background=[("disabled", _pro_mix(root, panel, text, 0.05)),
+                           ("pressed", _pro_mix(root, panel, text, 0.24)),
+                           ("active", _pro_mix(root, panel, text, 0.17))],
+               foreground=[("disabled", dim)],
+               bordercolor=[("active", accent), ("pressed", accent)],
+               lightcolor=[("active", _pro_mix(root, panel, text, 0.17)),
+                           ("pressed", _pro_mix(root, panel, text, 0.24))],
+               darkcolor=[("active", _pro_mix(root, panel, text, 0.17)),
+                          ("pressed", _pro_mix(root, panel, text, 0.24))])
+        st.configure("Accent.TButton", background=accent, foreground=on_accent,
+                     bordercolor=accent, lightcolor=accent, darkcolor=accent,
+                     focuscolor=accent, padding=(16, 6), relief="flat", borderwidth=1,
+                     font=(_PRO_FONT, 10, "bold"))
+        st.map("Accent.TButton",
+               background=[("disabled", _pro_mix(root, panel, accent, 0.35)),
+                           ("pressed", accent_press), ("active", accent_hover)],
+               foreground=[("disabled", _pro_mix(root, panel, on_accent, 0.55))],
+               bordercolor=[("disabled", _pro_mix(root, panel, accent, 0.35)),
+                            ("pressed", accent_press), ("active", accent_hover)],
+               lightcolor=[("pressed", accent_press), ("active", accent_hover)],
+               darkcolor=[("pressed", accent_press), ("active", accent_hover)])
+        st.configure("TLabelframe", background=panel, bordercolor=hair, lightcolor=hair,
+                     darkcolor=hair, relief="solid", borderwidth=1)
+        st.configure("TLabelframe.Label", background=panel, foreground=text,
+                     font=(_PRO_FONT, 10, "bold"))
+        st.configure("TSeparator", background=hair)
+        thumb = _pro_mix(root, panel, text, 0.26)
+        thumb_hot = _pro_mix(root, panel, text, 0.42)
+        for orient, trough in (("Vertical", "ns"), ("Horizontal", "ew")):
+            name = f"{orient}.TScrollbar"
+            st.layout(name, [(f"{orient}.Scrollbar.trough", {"sticky": trough, "children": [
+                (f"{orient}.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})]})])
+            st.configure(name, troughcolor=bg, background=thumb, bordercolor=bg,
+                         lightcolor=thumb, darkcolor=thumb, gripcount=0, borderwidth=0,
+                         width=10, arrowsize=10)
+            st.map(name, background=[("active", thumb_hot), ("pressed", thumb_hot)],
+                   lightcolor=[("active", thumb_hot), ("pressed", thumb_hot)],
+                   darkcolor=[("active", thumb_hot), ("pressed", thumb_hot)])
+    except Exception:
+        pass
+
+    # ---- classic tk widgets -----------------------------------------------
+    def _gm_pad(w, ipady):
+        try:
+            if getattr(w, "_vp_ipad", False):
+                return
+            mgr = w.winfo_manager()
+            if mgr == "pack":
+                w.pack_configure(ipady=ipady)
+            elif mgr == "grid":
+                w.grid_configure(ipady=ipady)
+            w._vp_ipad = True
+        except Exception:
+            pass
+
+    def _btn(w):
+        try:
+            cur_bg = w.cget("bg")
+            primary = getattr(w, "_vp_primary", None)
+            if primary is None:
+                _t = str(w.cget("text")).strip().lower()
+                if (getattr(w, "_tag", None) in ("save", "primary")
+                        or _t in _PRO_PRIMARY_TEXTS):
+                    primary = True
+                    w._vp_primary = True
+            if primary is None:
+                primary = False        # only Start/Run/Save actions are accent
+                w._vp_primary = False
+            parent_bg = panel
+            try:
+                parent_bg = w.master.cget("bg")
+            except Exception:
+                pass
+            if primary:
+                base, hover, press, fg = accent, accent_hover, accent_press, on_accent
+                w.configure(highlightthickness=0, bd=0)
+            else:
+                base = _pro_mix(w, parent_bg, text, 0.10)
+                hover = _pro_mix(w, parent_bg, text, 0.17)
+                press = _pro_mix(w, parent_bg, text, 0.24)
+                fg = text
+                w.configure(highlightthickness=1, bd=0, highlightbackground=hair,
+                            highlightcolor=accent)
+            w._vp_colors = (base, hover, press)
+            w.configure(bg=base, fg=fg, activebackground=press, activeforeground=fg,
+                        relief="flat", cursor="hand2", disabledforeground=_pro_mix(w, base, text, 0.40),
+                        font=_pro_font(w.cget("font"), min_size=10, weight="bold"),
+                        padx=16, pady=6)
+            if not getattr(w, "_vp_bound", False):
+                def _enter(_e=None, _w=w):
+                    try:
+                        if str(_w.cget("state")) != "disabled":
+                            _w.configure(bg=_w._vp_colors[1])
+                    except Exception:
+                        pass
+
+                def _leave(_e=None, _w=w):
+                    try:
+                        _w.configure(bg=_w._vp_colors[0])
+                    except Exception:
+                        pass
+                w.bind("<Enter>", _enter, add="+")
+                w.bind("<Leave>", _leave, add="+")
+                w._vp_bound = True
+        except Exception:
+            pass
+
+    def _entry(w):
+        try:
+            w.configure(relief="flat", bd=0, highlightthickness=1, highlightbackground=hair,
+                        highlightcolor=accent, insertbackground=text, bg=inputbg, fg=text,
+                        selectbackground=accent, selectforeground=on_accent,
+                        font=_pro_font(w.cget("font"), min_size=10))
+            try:
+                w.configure(disabledbackground=alt, readonlybackground=alt,
+                            disabledforeground=dim)
+            except Exception:
+                pass
+            _gm_pad(w, 3)
+        except Exception:
+            pass
+
+    def _text(w):
+        try:
+            fam = None
+            try:
+                fam = tkfont.Font(font=w.cget("font")).actual("family")
+            except Exception:
+                pass
+            mono = bool(fam) and any(k in fam.lower() for k in ("consol", "courier", "mono", "cascadia"))
+            w.configure(relief="flat", bd=0, highlightthickness=1, highlightbackground=hair,
+                        highlightcolor=accent, insertbackground=text, padx=10, pady=8,
+                        selectbackground=accent, selectforeground=on_accent,
+                        font=_pro_font(w.cget("font"), family=_PRO_MONO if mono else _PRO_FONT, min_size=10))
+        except Exception:
+            pass
+
+    def _walk(w):
+        try:
+            cls = w.winfo_class()
+        except Exception:
+            return
+        tag = getattr(w, "_tag", None)
+        header_zone = tag in ("header", "header_label", "brand", "logo", "footer")
+        if not header_zone:
+            if cls == "Button":
+                _btn(w)
+            elif cls == "TButton":
+                try:
+                    _t = str(w.cget("text")).strip().lower()
+                    if _t in _PRO_PRIMARY_TEXTS:
+                        w.configure(style="Accent.TButton")
+                    w.configure(cursor="hand2")
+                except Exception:
+                    pass
+            elif cls == "Entry":
+                _entry(w)
+            elif cls == "Text":
+                _text(w)
+            elif cls == "Labelframe":
+                try:
+                    w.configure(bd=0, relief="flat", highlightthickness=1,
+                                highlightbackground=hair, highlightcolor=hair,
+                                fg=text, font=_pro_font(w.cget("font"), min_size=10, weight="bold"),
+                                padx=10, pady=6)
+                except Exception:
+                    pass
+            elif cls in ("Radiobutton", "Checkbutton"):
+                try:
+                    w.configure(cursor="hand2", activebackground=w.cget("bg"),
+                                activeforeground=text, selectcolor=inputbg,
+                                font=_pro_font(w.cget("font")))
+                except Exception:
+                    pass
+            elif cls == "Label":
+                try:
+                    w.configure(font=_pro_font(w.cget("font")))
+                except Exception:
+                    pass
+        for ch in w.winfo_children():
+            _walk(ch)
+
+    try:
+        _walk(root)
+    except Exception:
+        pass
