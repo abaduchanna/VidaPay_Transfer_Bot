@@ -7429,7 +7429,8 @@ try:
             _vp_layout(self)
         except Exception:
             pass
-        return _vp_orig_show(self, *a, **k)
+        # build + lay out + paint while invisible, then reveal the finished frame
+        return _vp_tm.reveal_when_ready(self, lambda: _vp_orig_show(self, *a, **k))
     VidaPayTransferApp._show_main_window = _vp_show_with_layout
 except Exception:
     pass

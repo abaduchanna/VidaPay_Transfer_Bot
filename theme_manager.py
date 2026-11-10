@@ -777,6 +777,7 @@ def make_resizable(parent, panes, orient="horizontal", weights=None, minsizes=No
             except Exception:
                 pass
         pw.after(80, _apply_initial)
+        _VP_SETTLE.append(_apply_initial)
         _st = {"drag": False, "t0": None}
 
         def _settle(_e=None):
@@ -946,6 +947,7 @@ def make_scrollable(root, body, min_w=0, min_h=0):
                 pass
         holder.bind_all("<MouseWheel>", _wheel, add="+")
         holder.after(120, lambda: (sync(), _restack()))
+        _VP_SETTLE.append(lambda: (sync(), _restack()))
         return holder
     except Exception:
         return None
@@ -1029,3 +1031,51 @@ def make_standard_footer(parent, deactivate_cb=None, side="bottom", grid_kw=None
         link.bind("<Button-1>", lambda _e: deactivate_cb())
         link._tag = "footer_label"
     return bar
+
+
+# ── Flicker-free startup: build everything while the window is invisible ────
+_VP_SETTLE = []
+
+
+def settle_layout(win):
+    """Run every pending layout step (sash positions, scroll sizing, restacking)
+    SYNCHRONOUSLY while the window is still invisible, then flush all painting,
+    so the first frame the user sees is the finished UI (no white/blank flash
+    that 'clears' a few seconds later)."""
+    for _ in range(3):
+        try:
+            win.update_idletasks()
+        except Exception:
+            pass
+        for fn in list(_VP_SETTLE):
+            try:
+                fn()
+            except Exception:
+                pass
+        try:
+            win.update()
+        except Exception:
+            pass
+    del _VP_SETTLE[:]
+
+
+def reveal_when_ready(win, show_fn):
+    """Hide (alpha 0) -> map/maximise via show_fn -> settle layout -> flush
+    paints -> show the finished window in one step."""
+    try:
+        win.attributes("-alpha", 0.0)
+    except Exception:
+        pass
+    try:
+        return show_fn()
+    finally:
+        try:
+            settle_layout(win)
+            win.update_idletasks()
+            win.update()
+        except Exception:
+            pass
+        try:
+            win.attributes("-alpha", 1.0)
+        except Exception:
+            pass
