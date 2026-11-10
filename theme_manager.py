@@ -863,8 +863,13 @@ def make_scrollable(root, body, min_w=0, min_h=0):
             # the overflowing part of body is hidden behind them (body is not clipped)
             try:
                 for w in root.winfo_children():
-                    if w is not body and w is not holder and w.winfo_class() != "Toplevel":
-                        w.lift()
+                    # never touch Menus / Toplevels: raising an (unposted) popup menu
+                    # makes it appear at the top-left corner of the screen
+                    if w is body or w is holder:
+                        continue
+                    if w.winfo_class() in ("Menu", "Toplevel") or w.winfo_toplevel() is w:
+                        continue
+                    w.lift()
                 if state["v"]:
                     vs.lift()
                 if state["h"]:
