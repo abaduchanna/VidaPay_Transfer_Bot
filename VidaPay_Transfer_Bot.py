@@ -5296,7 +5296,7 @@ class VidaPayTransferApp(tk.Tk):
                 pass
             self.geometry(f"{max(640, min(w, sw))}x{max(480, min(h, sh))}"
                           f"+{max(0, x)}+{max(0, y)}")
-            self.minsize(min(1020, max(560, sw // 2)),
+            self.minsize(min(900, max(560, sw // 2)),
                          min(700, max(420, sh // 2)))
             self.resizable(True, True)
         except Exception:
@@ -5545,19 +5545,9 @@ class VidaPayTransferApp(tk.Tk):
         except Exception:
             pass
 
-        # Copyright footer
-        _cbar = tk.Frame(self, bg="#090d26", height=24)
-        _cbar.pack(fill=tk.X, side="bottom")
-        _cbar.pack_propagate(False)
-        _cbar._tag = "footer"
-        _cbar_label = tk.Label(
-            _cbar,
-            text=f"Developed by www.3SVerse.com | Copyright © {date.today().year} | All rights reserved.",
-            font=("Segoe UI", 8), fg="#9d9db8", bg="#090d26",
-        )
+        # Standard VidaPay footer (shared across all four apps)
         self.log_area._tag = "log"
-        _cbar_label.pack(expand=True, fill="both")
-        _cbar_label._tag = "footer_label"
+        _vp_tm.make_standard_footer(self, deactivate_cb=self._deactivate_this_pc)
 
     def _build_config_tab(self):
         config_container = tk.Frame(self.tab_config)
@@ -7374,6 +7364,73 @@ try:
             pass
         return r
     VidaPayTransferApp._apply_theme = _vp_apply_theme_pro
+except Exception:
+    pass
+
+
+
+def _vp_deactivate_this_pc(self):
+    """Self-service seat release (footer link) - same behaviour as the other VidaPay tools."""
+    from tkinter import messagebox as _mb
+    import threading as _th
+    import license_core as _lc
+    if not _mb.askyesno(
+            "Deactivate this PC",
+            "Release this PC's activation?\n\n"
+            "Your license key is NOT consumed - you can activate the "
+            "same key on any other PC at any time (for example after a "
+            "laptop replacement).\n\nThis PC will stop running the tool "
+            "until it is activated again.",
+            parent=self):
+        return
+
+    def _work():
+        ok, msg = _lc.deactivate_this_pc()
+        self.after(0, lambda: _vp_deactivate_done(self, ok, msg))
+
+    _th.Thread(target=_work, daemon=True).start()
+
+
+def _vp_deactivate_done(self, ok, msg):
+    from tkinter import messagebox as _mb
+    if ok:
+        _mb.showinfo("Deactivated", msg, parent=self)
+        self.destroy()
+    else:
+        _mb.showwarning("Not deactivated", msg, parent=self)
+
+
+VidaPayTransferApp._deactivate_this_pc = _vp_deactivate_this_pc
+
+# ---- resizable panels + scroll-when-needed (3SVerse pro layout) ------------
+def _vp_layout(app):
+    root = app
+    body = None
+    for c in root.winfo_children():
+        if c.winfo_class() == "Frame" and c.winfo_manager() == "pack":
+            i = c.pack_info()
+            if i.get("side") == "top" and i.get("fill") == "both":
+                body = c
+    cols = [c for c in body.winfo_children() if c.winfo_class() == "Frame"]
+    left = [c for c in cols if c.pack_info().get("side") == "left"][0]
+    right = [c for c in cols if c.pack_info().get("side") == "right"][0]
+    _narrow = root.winfo_screenwidth() < 1500
+    _vp_tm.make_resizable(body, [left, right], "horizontal", weights=[4, 1],
+                          minsizes=[560, 220], last_size=280 if _narrow else 360)
+    # snap-layout friendly: design minimum fits a half-width snapped window
+    _vp_tm.make_scrollable(root, body, min_w=900, min_h=520)
+
+
+try:
+    _vp_orig_show = VidaPayTransferApp._show_main_window
+
+    def _vp_show_with_layout(self, *a, **k):
+        try:
+            _vp_layout(self)
+        except Exception:
+            pass
+        return _vp_orig_show(self, *a, **k)
+    VidaPayTransferApp._show_main_window = _vp_show_with_layout
 except Exception:
     pass
 

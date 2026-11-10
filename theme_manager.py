@@ -544,6 +544,14 @@ def polish_ui(root, colors=None):
         st.configure("TLabelframe.Label", background=panel, foreground=text,
                      font=(_PRO_FONT, 10, "bold"))
         st.configure("TSeparator", background=hair)
+        # draggable split-view handles: visible dotted grip, accent on hover
+        sash_bg = _pro_mix(root, bg, text, 0.10)
+        st.configure("TPanedwindow", background=bg)
+        st.configure("Sash", sashthickness=9, gripcount=7, handlesize=9, background=sash_bg,
+                     lightcolor=_pro_mix(root, bg, text, 0.30), darkcolor=_pro_mix(root, bg, text, 0.30),
+                     bordercolor=bg, sashpad=0)
+        st.map("Sash", background=[("active", accent)], lightcolor=[("active", on_accent)],
+               darkcolor=[("active", on_accent)])
         thumb = _pro_mix(root, panel, text, 0.26)
         thumb_hot = _pro_mix(root, panel, text, 0.42)
         for orient, trough in (("Vertical", "ns"), ("Horizontal", "ew")):
@@ -704,3 +712,315 @@ def polish_ui(root, colors=None):
         _walk(root)
     except Exception:
         pass
+
+
+# ── Resizable panels, scroll-when-needed, wrapping toolbars ────────────────
+def make_resizable(parent, panes, orient="horizontal", weights=None, minsizes=None,
+                   ratios=None, last_size=None):
+    """Turn already laid-out SIBLING panes into a split view with a draggable
+    sash between them. Panes keep their current size; extra space follows
+    `weights`; `minsizes` stop a pane being dragged shut."""
+    from tkinter import ttk
+    try:
+        n = len(panes)
+        weights = weights or [1] * n
+        minsizes = minsizes or [60] * n
+        horiz = orient == "horizontal"
+        sizes = [(p.winfo_width() if horiz else p.winfo_height()) or
+                 (p.winfo_reqwidth() if horiz else p.winfo_reqheight()) for p in panes]
+        mgr = panes[0].winfo_manager()
+        pw = ttk.PanedWindow(parent, orient=orient)
+        if mgr == "grid":
+            infos = [p.grid_info() for p in panes]
+            r0 = min(int(i["row"]) for i in infos)
+            c0 = min(int(i["column"]) for i in infos)
+            r1 = max(int(i["row"]) + int(i.get("rowspan", 1)) for i in infos)
+            c1 = max(int(i["column"]) + int(i.get("columnspan", 1)) for i in infos)
+            pw.grid(row=r0, column=c0, rowspan=r1 - r0, columnspan=c1 - c0, sticky="nsew")
+            parent.grid_columnconfigure(c0, weight=1)
+            parent.grid_rowconfigure(r0, weight=1)
+            for p in panes:
+                p.grid_forget()
+        elif mgr == "pack":
+            info = panes[0].pack_info()
+            pw.pack(before=panes[0], fill="both", expand=True,
+                    side=info.get("side", "top"))
+            for p in panes:
+                p.pack_forget()
+        else:
+            return None
+        for p, w in zip(panes, weights):
+            pw.add(p, weight=w)
+            try:
+                p.lift(pw)       # panes were created BEFORE pw: raise them above it
+            except Exception:
+                p.lift()
+
+        def _apply_initial():
+            try:
+                pw.update_idletasks()
+                total = pw.winfo_width() if horiz else pw.winfo_height()
+                if total <= 1:
+                    pw.after(60, _apply_initial)
+                    return
+                pos = 0
+                for i in range(n - 1):
+                    if ratios:
+                        pos = int(total * sum(ratios[:i + 1]) / float(sum(ratios)))
+                    elif last_size and i == n - 2:
+                        pos = total - last_size
+                    else:
+                        pos += sizes[i]
+                    lo = sum(minsizes[:i + 1])
+                    hi = total - sum(minsizes[i + 1:])
+                    pw.sashpos(i, max(lo, min(pos, hi)))
+            except Exception:
+                pass
+        pw.after(80, _apply_initial)
+        _st = {"drag": False, "t0": None}
+
+        def _settle(_e=None):
+            # window is still being maximised/shown: keep the INITIAL proportions until
+            # the user touches a sash (or ~2s have passed)
+            try:
+                import time as _t
+                if _st["t0"] is None:
+                    _st["t0"] = _t.time()
+                if not _st["drag"] and _t.time() - _st["t0"] < 2.0:
+                    pw.after_idle(_apply_initial)
+            except Exception:
+                pass
+        pw.bind("<Configure>", _settle, add="+")
+        pw.bind("<ButtonPress-1>", lambda _e: _st.__setitem__("drag", True), add="+")
+
+        def _clamp(_e=None):
+            try:
+                total = pw.winfo_width() if horiz else pw.winfo_height()
+                for i in range(n - 1):
+                    lo = sum(minsizes[:i + 1])
+                    hi = total - sum(minsizes[i + 1:])
+                    cur = pw.sashpos(i)
+                    if cur < lo:
+                        pw.sashpos(i, lo)
+                    elif cur > hi > lo:
+                        pw.sashpos(i, hi)
+            except Exception:
+                pass
+        pw.bind("<B1-Motion>", _clamp, add="+")
+        pw.bind("<ButtonRelease-1>", _clamp, add="+")
+        pw.configure(cursor="sb_h_double_arrow" if horiz else "sb_v_double_arrow")
+        return pw
+    except Exception:
+        return None
+
+
+def make_scrollable(root, body, min_w=0, min_h=0):
+    """Wrap `body` so scrollbars appear ONLY when the window is smaller than the
+    content needs (vertical and/or horizontal). Mouse wheel scrolls it."""
+    import tkinter as tk
+    from tkinter import ttk
+    try:
+        mgr = body.winfo_manager()
+        if mgr not in ("pack", "grid") or getattr(body, "_vp_scroll", False):
+            return None
+        info = body.grid_info() if mgr == "grid" else body.pack_info()
+        info.pop("in", None)
+        try:
+            bgc = ttk.Style(root).lookup("TFrame", "background") or root.cget("bg")
+        except Exception:
+            bgc = "#000000"
+        try:
+            bgc = body.cget("bg")
+        except Exception:
+            pass
+        holder = tk.Frame(root, bd=0, highlightthickness=0, bg=bgc)
+        holder.grid_rowconfigure(0, weight=1)
+        holder.grid_columnconfigure(0, weight=1)
+        cv = tk.Canvas(holder, highlightthickness=0, bd=0, bg=bgc)
+        # Scrollbars are children of ROOT (not holder) and are placed over the
+        # holder's right/bottom edge: `body` is a sibling of the canvas, so it is
+        # stacked above holder and its own children - the bars must be above it.
+        vs = ttk.Scrollbar(root, orient="vertical", command=cv.yview)
+        hs = ttk.Scrollbar(root, orient="horizontal", command=cv.xview)
+        cv.configure(yscrollcommand=vs.set, xscrollcommand=hs.set)
+        cv.grid(row=0, column=0, sticky="nsew")
+        # order matters: put the holder in body's slot FIRST (body is still managed
+        # by pack/grid), release body, and only then hand it to the canvas.
+        if mgr == "grid":
+            holder.grid(**info)
+            body.grid_forget()
+        else:
+            holder.pack(after=body, **info)
+            body.pack_forget()
+        win = cv.create_window(0, 0, anchor="nw", window=body)
+        body._vp_scroll = True
+        body.lift()   # window items must sit ABOVE the canvas holder in stacking order
+        state = {"v": False, "h": False, "last": None}
+        BAR = 12
+
+        def _restack():
+            # header / footer / other siblings and the bars must sit ABOVE body so
+            # the overflowing part of body is hidden behind them (body is not clipped)
+            try:
+                for w in root.winfo_children():
+                    if w is not body and w is not holder and w.winfo_class() != "Toplevel":
+                        w.lift()
+                if state["v"]:
+                    vs.lift()
+                if state["h"]:
+                    hs.lift()
+            except Exception:
+                pass
+
+        def sync(_e=None):
+            try:
+                cw, ch = holder.winfo_width(), holder.winfo_height()
+                if cw <= 1 or ch <= 1:
+                    return
+                rw = min_w or body.winfo_reqwidth()
+                rh = min_h or body.winfo_reqheight()
+                need_v, need_h = ch < rh, cw < rw
+                if need_v and not need_h and cw - BAR < rw:
+                    need_h = True
+                if need_h and not need_v and ch - BAR < rh:
+                    need_v = True
+                aw = cw - (BAR if need_v else 0)
+                ah = ch - (BAR if need_h else 0)
+                bw, bh = max(aw, rw), max(ah, rh)
+                key = (bw, bh, need_v, need_h)
+                if key == state["last"]:
+                    return
+                state["last"] = key
+                cv.itemconfigure(win, width=bw, height=bh)
+                cv.configure(scrollregion=(0, 0, bw, bh))
+                if need_v != state["v"]:
+                    if need_v:
+                        vs.place(in_=holder, relx=1.0, x=-BAR, y=0, width=BAR,
+                                 relheight=1.0, height=-(BAR if need_h else 0))
+                    else:
+                        vs.place_forget()
+                    state["v"] = need_v
+                if need_h != state["h"]:
+                    if need_h:
+                        hs.place(in_=holder, rely=1.0, y=-BAR, x=0, height=BAR,
+                                 relwidth=1.0, width=-(BAR if need_v else 0))
+                    else:
+                        hs.place_forget()
+                    state["h"] = need_h
+                _restack()
+                if not need_v:
+                    cv.yview_moveto(0)
+                if not need_h:
+                    cv.xview_moveto(0)
+            except Exception:
+                pass
+
+        holder.bind("<Configure>", sync)
+        body.bind("<Configure>", lambda e: holder.after_idle(sync), add="+")
+
+        def _wheel(e):
+            try:
+                if not (state["v"] or state["h"]):
+                    return
+                w = holder.winfo_containing(e.x_root, e.y_root)
+                if w is None:
+                    return
+                p = w
+                while p is not None and p is not holder:
+                    if p.winfo_class() in ("Text", "Treeview", "Listbox", "TCombobox",
+                                           "Scrolledtext"):
+                        return
+                    p = p.master
+                if p is None:
+                    return
+                if e.state & 0x1 and state["h"]:
+                    cv.xview_scroll(-1 if e.delta > 0 else 1, "units")
+                elif state["v"]:
+                    cv.yview_scroll(-1 if e.delta > 0 else 1, "units")
+            except Exception:
+                pass
+        holder.bind_all("<MouseWheel>", _wheel, add="+")
+        holder.after(120, lambda: (sync(), _restack()))
+        return holder
+    except Exception:
+        return None
+
+
+def make_flow(frame, hpad=6, vpad=4):
+    """Make a row of buttons WRAP onto extra lines instead of being cut off at
+    the right edge of a narrow window."""
+    try:
+        kids = [c for c in frame.winfo_children() if c.winfo_manager() in ("pack", "grid")]
+        if len(kids) < 2 or getattr(frame, "_vp_flow", False):
+            return
+        for c in kids:
+            if c.winfo_manager() == "pack":
+                c.pack_forget()
+            else:
+                c.grid_forget()
+        frame._vp_flow = True
+        last = {"w": -1}
+
+        def layout(_e=None):
+            try:
+                w = frame.winfo_width()
+                if w <= 1 or w == last["w"]:
+                    return
+                last["w"] = w
+                x = row = col = 0
+                for c in kids:
+                    cw = c.winfo_reqwidth() + hpad
+                    if x + cw > w and col > 0:
+                        row += 1
+                        col = 0
+                        x = 0
+                    c.grid(row=row, column=col, padx=(0, hpad), pady=(0, vpad), sticky="w")
+                    col += 1
+                    x += cw
+            except Exception:
+                pass
+        frame.bind("<Configure>", layout, add="+")
+        frame.after(60, layout)
+    except Exception:
+        pass
+
+
+def make_standard_footer(parent, deactivate_cb=None, side="bottom", grid_kw=None,
+                         extra="  |  Independent vendor - not affiliated with VidaPay."):
+    """THE footer for every VidaPay app: 24px navy bar, copyright text centred
+    across the full width, and (when a callback is given) the 'Deactivate this
+    PC' link pinned to the RIGHT edge, vertically centred. Built with place()
+    so alignment never depends on text lengths or window width."""
+    import tkinter as tk
+    from datetime import date
+    navy, dim = "#090d26", "#9d9db8"
+    bar = tk.Frame(parent, bg=navy, height=24)
+    if grid_kw is not None:
+        bar.grid(**grid_kw)
+        bar.grid_propagate(False)
+    else:
+        bar.pack(fill="x", side=side)
+        bar.pack_propagate(False)
+    bar._tag = "footer"
+    lbl = tk.Label(bar, text=f"Developed by www.3SVerse.com | Copyright \u00a9 {date.today().year} | All rights reserved.{extra}",
+                   font=("Segoe UI", 8), fg=dim, bg=navy, bd=0, highlightthickness=0)
+    lbl.place(relx=0.5, rely=0.5, anchor="center")
+    lbl._tag = "footer_label"
+    _full = lbl.cget("text")
+    _short = f"Developed by www.3SVerse.com | Copyright \u00a9 {date.today().year}"
+
+    def _fit(_e=None):
+        # keep the centred text clear of the right-hand link on narrow windows
+        try:
+            w = bar.winfo_width()
+            lbl.configure(text=_full if w >= 1000 else (_short if w >= 560 else ""))
+        except Exception:
+            pass
+    bar.bind("<Configure>", _fit, add="+")
+    if deactivate_cb is not None:
+        link = tk.Label(bar, text="Deactivate this PC", font=("Segoe UI", 8, "underline"),
+                        fg=dim, bg=navy, cursor="hand2", bd=0, highlightthickness=0)
+        link.place(relx=1.0, rely=0.5, anchor="e", x=-14)
+        link.bind("<Button-1>", lambda _e: deactivate_cb())
+        link._tag = "footer_label"
+    return bar
