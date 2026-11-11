@@ -58,6 +58,11 @@ a = Analysis(
         'pandas',
         'pytesseract',
         'schedule',
+        # license_core.py (untouched business logic) shows a Tk-based
+        # activation dialog when no valid license is present - tkinter
+        # must stay bundled even though the main GUI no longer uses it.
+        'tkinter',
+        '_tkinter',
         # bs4: just declare the top-level package. PyInstaller's built-in
         # bs4 hook (from _pyinstaller_hooks_contrib) automatically pulls
         # in the correct builder modules for the installed bs4 version.
@@ -71,8 +76,6 @@ a = Analysis(
     excludedimports=[
         'doctest',
         'pdb',
-        'tkinter',
-        '_tkinter',
         'pyperclip',
         'torch',
         'torchvision',
