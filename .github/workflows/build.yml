@@ -17,6 +17,7 @@ jobs:
       matrix:
         app:
           - VidaPay_Transfer_Bot
+          - VidaPay_Transfer_Bot_Qt
 
     steps:
       - name: Checkout
